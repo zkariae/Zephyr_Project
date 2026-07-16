@@ -29,4 +29,29 @@
 &quadspi_memory {
 	reg = <0x90000000 0x00100000>; /* 1 Mo, au lieu des 256 Mo par defaut */
 	zephyr,memory-region = "QSPI_XIP";
+
+	/*
+	 * quadspi_memory herite par defaut de zephyr,memory-attr =
+	 * ATTR_MPU_EXTMEM (stm32f7.dtsi), qui genere une region MPU
+	 * additionnelle NO_ACCESS (REGION_EXTMEM_ATTR, voir
+	 * zephyr/include/zephyr/arch/arm/mpu/arm_mpu_v7m.h). Cette region est
+	 * programmee a un index MPU plus eleve que la region statique
+	 * "FLASH_0" (deja RO+executable, derivee automatiquement de
+	 * CONFIG_FLASH_BASE_ADDRESS/SIZE via le chosen zephyr,flash
+	 * ci-dessus) - et sur ARMv7-M, en cas de chevauchement, c'est la
+	 * region de plus haut index qui gagne. Resultat : la region
+	 * NO_ACCESS ecrasait silencieusement FLASH_0 sur toute la fenetre
+	 * QSPI, provoquant un HardFault (Instruction Access Violation) des
+	 * qu'on tentait d'executer du code depuis 0x90000000.
+	 *
+	 * boot_qspi corrige ce meme heritage avec ATTR_MPU_IO, mais ce
+	 * n'est pas transposable ici : IO/Device est une region
+	 * architecturalement non-executable sur ARM (independamment du bit
+	 * XN), alors que Projet1 doit justement executer son code depuis
+	 * cette fenetre (contrairement a boot_qspi qui ne fait que sauter
+	 * par-dessus). La region FLASH_0 statique etant deja correcte, il
+	 * suffit de supprimer l'attribut herite pour empecher la generation
+	 * de la region fantome.
+	 */
+	/delete-property/ zephyr,memory-attr;
 };
