@@ -1,0 +1,32 @@
+/*
+ * La flash interne du STM32F750N8 ne fait que 64 Ko : trop petit pour LVGL.
+ * On redirige l'execution de l'appli vers la fenetre memoire-mappee du
+ * QSPI externe (n25q128a1, 16 Mo), exposee par le controleur QUADSPI a
+ * l'adresse 0x90000000.
+ *
+ * zephyr/dts/arm/st/f7/stm32f7.dtsi definit deja un noeud tout fait pour
+ * cette fenetre : "quadspi_memory" (memory-placeholder@90000000, 256 Mo).
+ * On le reutilise plutot que de creer un noeud concurrent a la meme adresse
+ * - juste besoin de reduire sa taille a ce qu'on reserve reellement pour
+ * l'appli (1 Mo, a l'offset 0 de la puce QSPI, comme "slot1_partition"/
+ * "image-1" deja defini dans le devicetree du board mais non utilise
+ * ailleurs dans ce workspace) et de le designer comme zephyr,flash.
+ *
+ * Ce n'est pas un vrai flash-controller : Kconfig derive
+ * CONFIG_FLASH_BASE_ADDRESS/CONFIG_FLASH_SIZE juste depuis la propriete
+ * "reg" du noeud chosen "zephyr,flash" (voir zephyr/scripts/kconfig/
+ * kconfigfunctions.py, fonction dt_chosen_reg), sans exiger de binding
+ * particulier - meme mecanisme que le noeud "sdram1" deja utilise dans
+ * main.c pour placer le framebuffer en SDRAM externe.
+ */
+
+/ {
+	chosen {
+		zephyr,flash = &quadspi_memory;
+	};
+};
+
+&quadspi_memory {
+	reg = <0x90000000 0x00100000>; /* 1 Mo, au lieu des 256 Mo par defaut */
+	zephyr,memory-region = "QSPI_XIP";
+};
