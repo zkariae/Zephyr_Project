@@ -6,6 +6,10 @@ target_sources(app PRIVATE
     src/main.c
     src/app_calculator.c
     src/app_alarm.c
+    src/system_overview.c
+    src/rtos_tasks.c
+    src/events_logs.c
+    src/live_variables.c
     src/launcher.c
     src/splash.c
     src/images/img_image1.c

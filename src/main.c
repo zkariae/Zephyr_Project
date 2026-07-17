@@ -5,6 +5,10 @@
 
 #include "app_calculator.h"
 #include "app_alarm.h"
+#include "system_overview.h"
+#include "rtos_tasks.h"
+#include "events_logs.h"
+#include "live_variables.h"
 #include "launcher.h"
 #include "splash.h"
 
@@ -23,10 +27,7 @@ int main(void)
     printk("Ecran pret\n");
 
     splash_show_image1();
-    /* display_blanking_off doit venir juste apres le 1er ecran charge,
-     * sinon l'utilisateur ne voit rien de la sequence de splash (l'ecran
-     * reste eteint pendant tout le reste de l'init, comme avant ce
-     * changement). */
+
     display_blanking_off(display_dev);
     printk("splash image1 affichee\n");
     k_sleep(K_MSEC(SPLASH_DELAY_MS));
@@ -42,6 +43,18 @@ int main(void)
 
     calculator_init();
     printk("calculator_init OK\n");
+
+    system_overview_init();
+    printk("system_overview_init OK\n");
+
+    rtos_tasks_init();
+    printk("rtos_tasks_init OK\n");
+
+    events_logs_init();
+    printk("events_logs_init OK\n");
+
+    live_variables_init();
+    printk("live_variables_init OK\n");
 
     launcher_init(); /* construit le launcher et l'affiche (lv_screen_load) */
     printk("launcher_init OK, ecran charge\n");
