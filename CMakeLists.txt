@@ -7,4 +7,7 @@ target_sources(app PRIVATE
     src/app_calculator.c
     src/app_alarm.c
     src/launcher.c
+    src/splash.c
+    src/images/img_image1.c
+    src/images/img_image2.c
 )
