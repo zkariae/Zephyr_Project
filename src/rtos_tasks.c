@@ -21,6 +21,7 @@ static struct task_row tasks[TASKS_MAX_ROWS];
 static void back_to_menu_cb(lv_event_t *e)
 {
     (void)e;
+    printk("[rtos_tasks]: Back to menu\n");
     lv_screen_load(launcher_screen_get());
 }
 
@@ -63,7 +64,7 @@ static void tasks_timer_cb(lv_timer_t *timer)
     size_t count = 0;
 
     k_thread_foreach_unlocked(thread_collect_cb, &count);
-
+    printk("[rtos_tasks]: Refreshing tasks table, %zu tasks\n", count);
     lv_table_set_row_count(tasks_table, count + 1);
     for (size_t i = 0; i < count; i++) {
         lv_table_set_cell_value(tasks_table, i + 1, 0, tasks[i].name);

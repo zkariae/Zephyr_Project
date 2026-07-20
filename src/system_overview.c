@@ -12,6 +12,7 @@ static lv_obj_t *uptime_label;
 static void back_to_menu_cb(lv_event_t *e)
 {
     (void)e;
+    printk("[system_overview]: Back to menu\n");
     lv_screen_load(launcher_screen_get());
 }
 
@@ -19,7 +20,7 @@ static void uptime_timer_cb(lv_timer_t *timer)
 {
     (void)timer;
     uint32_t uptime_s = (uint32_t)(k_uptime_get() / 1000);
-
+    printk("[system_overview]: Uptime: %u s\n", uptime_s);
     lv_label_set_text_fmt(uptime_label, "Uptime: %u s", uptime_s);
 }
 

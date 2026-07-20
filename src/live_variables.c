@@ -14,6 +14,7 @@ static lv_obj_t *vars_table;
 static void back_to_menu_cb(lv_event_t *e)
 {
     (void)e;
+    printk("[live_variables]: Back to menu\n");
     lv_screen_load(launcher_screen_get());
 }
 
@@ -25,7 +26,7 @@ static void vars_timer_cb(lv_timer_t *timer)
 
     lvgl_heap_stats(&heap_stats);
     k_thread_stack_space_get(k_current_get(), &stack_unused);
-
+    printk("[live_variables]: Refreshing variables\n");
     lv_table_set_cell_value_fmt(vars_table, 1, 1, "%u", (unsigned int)heap_stats.allocated_bytes);
     lv_table_set_cell_value_fmt(vars_table, 2, 1, "%u", (unsigned int)heap_stats.free_bytes);
     lv_table_set_cell_value_fmt(vars_table, 3, 1, "%u", (unsigned int)heap_stats.max_allocated_bytes);

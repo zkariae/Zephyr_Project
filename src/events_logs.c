@@ -1,7 +1,3 @@
-/* STUB TEMPORAIRE : ecran vide, juste pour permettre a launcher.c de lier
- * pendant qu'on valide la chaine QSPI XIP. Sera remplace par la vraie
- * appli events_logs (buffer d'evenements) a l'etape dediee du plan. */
-
 #include "events_logs.h"
 #include "launcher.h"
 #include <lvgl_zephyr.h>
@@ -11,6 +7,7 @@ static lv_obj_t *events_logs_screen;
 static void back_to_menu_cb(lv_event_t *e)
 {
     (void)e;
+    printk("[events_logs]: Back to menu\n");
     lv_screen_load(launcher_screen_get());
 }
 
