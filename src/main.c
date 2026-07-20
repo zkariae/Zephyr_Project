@@ -3,8 +3,6 @@
 #include <zephyr/drivers/display.h>
 #include <zephyr/sys/printk.h>
 
-#include "app_calculator.h"
-#include "app_alarm.h"
 #include "system_overview.h"
 #include "rtos_tasks.h"
 #include "events_logs.h"
@@ -37,12 +35,6 @@ int main(void)
     k_sleep(K_MSEC(SPLASH_DELAY_MS));
 
     splash_cleanup();
-
-    alarm_init();
-    printk("alarm_init OK\n");
-
-    calculator_init();
-    printk("calculator_init OK\n");
 
     system_overview_init();
     printk("system_overview_init OK\n");

@@ -1,6 +1,4 @@
 #include "launcher.h"
-#include "app_calculator.h"
-#include "app_alarm.h"
 #include "system_overview.h"
 #include "rtos_tasks.h"
 #include "events_logs.h"
@@ -8,20 +6,6 @@
 #include <lvgl_zephyr.h>
 
 static lv_obj_t *launcher_screen;
-
-#if 0
-static void open_calculator_cb(lv_event_t *e)
-{
-    (void)e;
-    lv_screen_load(calculator_screen_get());
-}
-
-static void open_alarm_cb(lv_event_t *e)
-{
-    (void)e;
-    lv_screen_load(alarm_screen_get());
-}
-#endif
 
 static void open_system_overview(lv_event_t *e)
 {

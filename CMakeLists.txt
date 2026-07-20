@@ -4,8 +4,6 @@ project(Projet1)
 
 target_sources(app PRIVATE
     src/main.c
-    src/app_calculator.c
-    src/app_alarm.c
     src/system_overview.c
     src/rtos_tasks.c
     src/events_logs.c
