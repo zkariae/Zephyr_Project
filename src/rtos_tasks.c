@@ -1,5 +1,6 @@
 #include "rtos_tasks.h"
 #include "launcher.h"
+#include "events_logs.h"
 #include <lvgl_zephyr.h>
 #include <zephyr/kernel.h>
 #include <string.h>
@@ -22,6 +23,7 @@ static void back_to_menu_cb(lv_event_t *e)
 {
     (void)e;
     printk("[rtos_tasks]: Back to menu\n");
+    events_logs_add("[rtos_tasks] Retour menu");
     lv_screen_load(launcher_screen_get());
 }
 

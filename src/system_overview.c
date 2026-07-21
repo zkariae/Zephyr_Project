@@ -1,5 +1,6 @@
 #include "system_overview.h"
 #include "launcher.h"
+#include "events_logs.h"
 #include <lvgl_zephyr.h>
 #include <zephyr/kernel.h>
 #include <zephyr/sys/util.h>
@@ -13,6 +14,7 @@ static void back_to_menu_cb(lv_event_t *e)
 {
     (void)e;
     printk("[system_overview]: Back to menu\n");
+    events_logs_add("[system_overview] Retour menu");
     lv_screen_load(launcher_screen_get());
 }
 

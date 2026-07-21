@@ -11,6 +11,7 @@ static void open_system_overview(lv_event_t *e)
 {
     (void)e;
     printk("[launcher]: Opening system overview\n");
+    events_logs_add("[launcher] Ouverture System Overview");
     lv_screen_load(system_overview_screen_get());
 }
 
@@ -18,6 +19,7 @@ static void open_rtos_info(lv_event_t *e)
 {
     (void)e;
     printk("[launcher]: Opening RTOS info\n");
+    events_logs_add("[launcher] Ouverture RTOS Tasks");
     lv_screen_load(rtos_tasks_screen_get());
 }
 
@@ -25,6 +27,7 @@ static void open_event_info(lv_event_t *e)
 {
     (void)e;
     printk("[launcher]: Opening event logs\n");
+    events_logs_add("[launcher] Ouverture Event Logs");
     lv_screen_load(events_logs_screen_get());
 }
 
@@ -32,6 +35,7 @@ static void open_live_variables(lv_event_t *e)
 {
     (void)e;
     printk("[launcher]: Opening live variables\n");
+    events_logs_add("[launcher] Ouverture Live Variables");
     lv_screen_load(live_variables_screen_get());
 }
 

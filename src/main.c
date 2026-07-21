@@ -17,12 +17,15 @@ int main(void)
     const struct device *display_dev = DEVICE_DT_GET(DT_CHOSEN(zephyr_display));
 
     printk("[main]: Projet1 demarre, verification de l'ecran...\n");
+    events_logs_add("[main] Projet1 demarre");
 
     if (!device_is_ready(display_dev)) {
         printk("[main]: Ecran non pret\n");
+        events_logs_add("[main] Ecran non pret");
         return -1;
     }
     printk("[main]: Ecran pret\n");
+    events_logs_add("[main] Ecran pret");
 
     splash_show_image1();
 
@@ -50,6 +53,7 @@ int main(void)
 
     launcher_init(); /* construit le launcher et l'affiche (lv_screen_load) */
     printk("[main]: launcher_init OK, ecran charge\n");
+    events_logs_add("[main] Boot termine, launcher affiche");
 
     while (1) {
         k_sleep(K_SECONDS(1));
