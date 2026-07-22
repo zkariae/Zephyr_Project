@@ -9,13 +9,15 @@
 #include "live_variables.h"
 #include "launcher.h"
 #include "splash.h"
+#include "adc_input.h"
 
 #define SPLASH_DELAY_MS 1500
 
 int main(void)
 {
     const struct device *display_dev = DEVICE_DT_GET(DT_CHOSEN(zephyr_display));
-
+    
+   
     printk("[main]: Projet1 demarre, verification de l'ecran...\n");
     events_logs_add("[main] Projet1 demarre");
 
@@ -47,6 +49,8 @@ int main(void)
 
     events_logs_init();
     printk("[main]: events_logs_init OK\n");
+        
+    adc_input_init();
 
     live_variables_init();
     printk("[main]: live_variables_init OK\n");
@@ -54,6 +58,9 @@ int main(void)
     launcher_init(); /* construit le launcher et l'affiche (lv_screen_load) */
     printk("[main]: launcher_init OK, ecran charge\n");
     events_logs_add("[main] Boot termine, launcher affiche");
+
+
+
 
     while (1) {
         k_sleep(K_SECONDS(1));

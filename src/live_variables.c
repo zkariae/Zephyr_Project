@@ -1,13 +1,14 @@
 #include "live_variables.h"
 #include "launcher.h"
 #include "events_logs.h"
+#include "adc_input.h"
 #include <lvgl_zephyr.h>
 #include <lvgl_mem.h>
 #include <zephyr/kernel.h>
 #include <zephyr/sys/mem_stats.h>
 
 #define VARS_REFRESH_PERIOD_MS 1000
-#define VARS_ROW_CNT 4
+#define VARS_ROW_CNT 5
 
 static lv_obj_t *live_variables_screen;
 static lv_obj_t *vars_table;
@@ -25,14 +26,23 @@ static void vars_timer_cb(lv_timer_t *timer)
     (void)timer;
     struct sys_memory_stats heap_stats;
     size_t stack_unused = 0;
+    int32_t adc_mv = 0;
 
     lvgl_heap_stats(&heap_stats);
     k_thread_stack_space_get(k_current_get(), &stack_unused);
+
+    int err = adc_input_read_data(&adc_mv);
+    if (err != 0) {
+        printk("[live_variables]: ADC read failed: %d\n", err);
+    }
+
     printk("[live_variables]: Refreshing variables\n");
+    printk("[live_variables]: adc_mv = %d mV\n", adc_mv);
     lv_table_set_cell_value_fmt(vars_table, 1, 1, "%u", (unsigned int)heap_stats.allocated_bytes);
     lv_table_set_cell_value_fmt(vars_table, 2, 1, "%u", (unsigned int)heap_stats.free_bytes);
     lv_table_set_cell_value_fmt(vars_table, 3, 1, "%u", (unsigned int)heap_stats.max_allocated_bytes);
     lv_table_set_cell_value_fmt(vars_table, 4, 1, "%u", (unsigned int)stack_unused);
+    lv_table_set_cell_value_fmt(vars_table, 5, 1, "%d", (int)adc_mv);
 }
 
 lv_obj_t *live_variables_screen_get(void)
@@ -64,8 +74,8 @@ void live_variables_init(void)
     lv_table_set_row_count(vars_table, VARS_ROW_CNT + 1);
     lv_table_set_column_width(vars_table, 0, 180);
     lv_table_set_column_width(vars_table, 1, 100);
-    lv_obj_set_style_pad_top(vars_table, 4, LV_PART_ITEMS);
-    lv_obj_set_style_pad_bottom(vars_table, 4, LV_PART_ITEMS);
+    lv_obj_set_style_pad_top(vars_table, 5, LV_PART_ITEMS);
+    lv_obj_set_style_pad_bottom(vars_table, 5, LV_PART_ITEMS);
     lv_obj_align(vars_table, LV_ALIGN_TOP_LEFT, 20, 60);
 
     lv_table_set_cell_value(vars_table, 0, 0, "Variable");
@@ -74,6 +84,7 @@ void live_variables_init(void)
     lv_table_set_cell_value(vars_table, 2, 0, "Heap LVGL libre (o)");
     lv_table_set_cell_value(vars_table, 3, 0, "Heap LVGL pic max (o)");
     lv_table_set_cell_value(vars_table, 4, 0, "Stack libre thread (o)");
+    lv_table_set_cell_value(vars_table, 5, 0, "Valeur ADC (mV)");
 
     lv_timer_create(vars_timer_cb, VARS_REFRESH_PERIOD_MS, NULL);
     vars_timer_cb(NULL);
