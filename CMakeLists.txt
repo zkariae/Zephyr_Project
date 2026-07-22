@@ -12,4 +12,5 @@ target_sources(app PRIVATE
     src/splash.c
     src/images/img_image1.c
     src/images/img_image2.c
+    src/adc_input.c
 )
