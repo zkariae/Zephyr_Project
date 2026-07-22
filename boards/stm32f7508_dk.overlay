@@ -55,3 +55,42 @@
 	 */
 	/delete-property/ zephyr,memory-attr;
 };
+
+/*
+ * ADC1, canal 0 (ADC1_IN0) sur PA0.
+ *
+ * adc1_in0_pa0 est le noeud pinctrl standard fourni par
+ * modules/hal/stm32/dts/st/f7/stm32f750n8hx-pinctrl.dtsi (inclus par
+ * boards/st/stm32f7508_dk/stm32f7508_dk.dts) pour cette combinaison
+ * ADC1/canal 0/PA0 - donc pas besoin de le redefinir ici, contrairement
+ * a un pin AF classique (UART, SPI...), un pin ADC est simplement bascule
+ * en mode analogique par ce noeud.
+ *
+ * io-channels expose le canal a l'application via adc_dt_spec /
+ * DT_IO_CHANNELS_... dans le noeud zephyr,user, comme les autres
+ * peripheriques deja references (SDRAM, QSPI) dans ce workspace.
+ */
+&adc1 {
+	pinctrl-0 = <&adc1_in0_pa0>;
+	pinctrl-names = "default";
+	/* st,adc-clock-source = "SYNC"; deja le defaut dans stm32f7.dtsi, pas besoin de le repeter */
+	st,adc-prescaler = <4>;
+	status = "okay";
+
+	#address-cells = <1>;
+	#size-cells = <0>;
+
+	channel@0 {
+		reg = <0>;
+		zephyr,gain = "ADC_GAIN_1";
+		zephyr,reference = "ADC_REF_INTERNAL";
+		zephyr,acquisition-time = <ADC_ACQ_TIME_DEFAULT>;
+		zephyr,resolution = <12>;
+	};
+};
+
+/ {
+	zephyr,user {
+		io-channels = <&adc1 0>;
+	};
+};
