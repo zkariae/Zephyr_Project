@@ -8,7 +8,7 @@
 #include <zephyr/sys/mem_stats.h>
 
 #define VARS_REFRESH_PERIOD_MS 1000
-#define VARS_ROW_CNT 5
+#define VARS_ROW_CNT (4 + ADC_CHANNEL_COUNT)
 
 static lv_obj_t *live_variables_screen;
 static lv_obj_t *vars_table;
@@ -26,23 +26,24 @@ static void vars_timer_cb(lv_timer_t *timer)
     (void)timer;
     struct sys_memory_stats heap_stats;
     size_t stack_unused = 0;
-    int32_t adc_mv = 0;
+    int32_t adc_mv[ADC_CHANNEL_COUNT];
 
     lvgl_heap_stats(&heap_stats);
     k_thread_stack_space_get(k_current_get(), &stack_unused);
 
-    int err = adc_input_read_data(&adc_mv);
-    if (err != 0) {
-        printk("[live_variables]: ADC read failed: %d\n", err);
+    printk("[live_variables]: Refreshing variables\n");
+    for (int i = 0; i < ADC_CHANNEL_COUNT; i++) {
+        adc_mv[i] = adc_input_get_mv(i);
+        printk("[live_variables]: adc_mv[%d] = %d mV\n", i, adc_mv[i]);
     }
 
-    printk("[live_variables]: Refreshing variables\n");
-    printk("[live_variables]: adc_mv = %d mV\n", adc_mv);
     lv_table_set_cell_value_fmt(vars_table, 1, 1, "%u", (unsigned int)heap_stats.allocated_bytes);
     lv_table_set_cell_value_fmt(vars_table, 2, 1, "%u", (unsigned int)heap_stats.free_bytes);
     lv_table_set_cell_value_fmt(vars_table, 3, 1, "%u", (unsigned int)heap_stats.max_allocated_bytes);
     lv_table_set_cell_value_fmt(vars_table, 4, 1, "%u", (unsigned int)stack_unused);
-    lv_table_set_cell_value_fmt(vars_table, 5, 1, "%d", (int)adc_mv);
+    for (int i = 0; i < ADC_CHANNEL_COUNT; i++) {
+        lv_table_set_cell_value_fmt(vars_table, 5 + i, 1, "%d", (int)adc_mv[i]);
+    }
 }
 
 lv_obj_t *live_variables_screen_get(void)
@@ -84,7 +85,10 @@ void live_variables_init(void)
     lv_table_set_cell_value(vars_table, 2, 0, "Heap LVGL libre (o)");
     lv_table_set_cell_value(vars_table, 3, 0, "Heap LVGL pic max (o)");
     lv_table_set_cell_value(vars_table, 4, 0, "Stack libre thread (o)");
-    lv_table_set_cell_value(vars_table, 5, 0, "Valeur ADC (mV)");
+    lv_table_set_cell_value(vars_table, 5, 0, "Valeur ADC pot0 (mV)");
+    lv_table_set_cell_value(vars_table, 6, 0, "Valeur ADC pot1 (mV)");
+    lv_table_set_cell_value(vars_table, 7, 0, "Valeur ADC pot2 (mV)");
+    lv_table_set_cell_value(vars_table, 8, 0, "Valeur ADC pot3 (mV)");
 
     lv_timer_create(vars_timer_cb, VARS_REFRESH_PERIOD_MS, NULL);
     vars_timer_cb(NULL);
