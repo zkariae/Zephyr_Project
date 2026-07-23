@@ -3,7 +3,9 @@
 
 #include <stdint.h>
 
+#define ADC_CHANNEL_COUNT 4
+
 int adc_input_init(void);
-int adc_input_read_data(int32_t *data_mv);
+int32_t adc_input_get_mv(int idx);
 
 #endif /* ADC_INPUT_H_ */
