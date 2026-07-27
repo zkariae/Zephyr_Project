@@ -8,6 +8,7 @@ target_sources(app PRIVATE
     src/rtos_tasks.c
     src/events_logs.c
     src/live_variables.c
+    src/plot_display.c
     src/launcher.c
     src/splash.c
     src/images/img_image1.c

@@ -3,6 +3,7 @@
 #include "rtos_tasks.h"
 #include "events_logs.h"
 #include "live_variables.h"
+#include "plot_display.h"
 #include <lvgl_zephyr.h>
 
 static lv_obj_t *launcher_screen;
@@ -37,6 +38,14 @@ static void open_live_variables(lv_event_t *e)
     printk("[launcher]: Opening live variables\n");
     events_logs_add("[launcher] Ouverture Live Variables");
     lv_screen_load(live_variables_screen_get());
+}
+
+static void open_plot_display(lv_event_t *e)
+{
+    (void)e;
+    printk("[launcher]: Opening plot display\n");
+    events_logs_add("[launcher] Ouverture Plot Display");
+    lv_screen_load(plot_display_screen_get());
 }
 
 lv_obj_t *launcher_screen_get(void)
@@ -89,6 +98,15 @@ void launcher_init(void)
     lv_obj_t *live_variable_label = lv_label_create(live_variable_btn);
     lv_label_set_text(live_variable_label, "LIVE VARIABLES");
     lv_obj_center(live_variable_label);
+
+    lv_obj_t *plot_btn = lv_button_create(launcher_screen);
+    lv_obj_set_size(plot_btn, 180, 60);
+    lv_obj_align(plot_btn, LV_ALIGN_CENTER, 0, 120);
+    lv_obj_add_event_cb(plot_btn, open_plot_display, LV_EVENT_CLICKED, NULL);
+
+    lv_obj_t *plot_label = lv_label_create(plot_btn);
+    lv_label_set_text(plot_label, "PLOT DISPLAY");
+    lv_obj_center(plot_label);
 
 
     lv_screen_load(launcher_screen);

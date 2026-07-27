@@ -10,6 +10,7 @@
 #include "launcher.h"
 #include "splash.h"
 #include "adc_input.h"
+#include "plot_display.h"
 
 #define SPLASH_DELAY_MS 1500
 
@@ -54,6 +55,9 @@ int main(void)
 
     live_variables_init();
     printk("[main]: live_variables_init OK\n");
+
+    plot_display_init();
+    printk("[main]: plot_display_init OK\n");
 
     launcher_init(); /* construit le launcher et l'affiche (lv_screen_load) */
     printk("[main]: launcher_init OK, ecran charge\n");
