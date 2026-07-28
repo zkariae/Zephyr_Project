@@ -18,6 +18,7 @@ struct task_row {
 static lv_obj_t *rtos_tasks_screen;
 static lv_obj_t *tasks_table;
 static struct task_row tasks[TASKS_MAX_ROWS];
+static lv_timer_t *tasks_timer;
 
 static void back_to_menu_cb(lv_event_t *e)
 {
@@ -76,6 +77,18 @@ static void tasks_timer_cb(lv_timer_t *timer)
     }
 }
 
+/* Le timer ne tourne que lorsque cet ecran est reellement affiche, pour
+ * ne pas charger le thread LVGL en permanence pour un ecran invisible. */
+static void rtos_tasks_visibility_cb(lv_event_t *e)
+{
+    if (lv_event_get_code(e) == LV_EVENT_SCREEN_LOADED) {
+        lv_timer_resume(tasks_timer);
+        lv_timer_ready(tasks_timer);
+    } else {
+        lv_timer_pause(tasks_timer);
+    }
+}
+
 lv_obj_t *rtos_tasks_screen_get(void)
 {
     return rtos_tasks_screen;
@@ -116,8 +129,14 @@ void rtos_tasks_init(void)
     lv_table_set_cell_value(tasks_table, 0, 2, "Prio");
     lv_table_set_cell_value(tasks_table, 0, 3, "Pile libre (o)");
 
-    lv_timer_create(tasks_timer_cb, TASKS_REFRESH_PERIOD_MS, NULL);
+    tasks_timer = lv_timer_create(tasks_timer_cb, TASKS_REFRESH_PERIOD_MS, NULL);
+    lv_timer_pause(tasks_timer);
     tasks_timer_cb(NULL);
+
+    lv_obj_add_event_cb(rtos_tasks_screen, rtos_tasks_visibility_cb,
+                         LV_EVENT_SCREEN_LOADED, NULL);
+    lv_obj_add_event_cb(rtos_tasks_screen, rtos_tasks_visibility_cb,
+                         LV_EVENT_SCREEN_UNLOADED, NULL);
 
     lvgl_unlock();
 }

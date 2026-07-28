@@ -31,6 +31,7 @@
 static lv_obj_t *plot_display_screen;
 static lv_obj_t *chart;
 static lv_chart_series_t *series[ADC_CHANNEL_COUNT];
+static lv_timer_t *plot_timer;
 
 /* Chaque graduation temps est ancree a l'instant ou elle a ete emise
  * (x_tick_time_ms) et glisse vers la gauche au meme rythme que les
@@ -187,6 +188,20 @@ static void plot_timer_cb(lv_timer_t *timer)
     }
 }
 
+/* Le timer ne tourne que lorsque cet ecran est reellement affiche, pour
+ * ne pas charger le thread LVGL en permanence pour un ecran invisible.
+ * Les 4 canaux ADC restent lus en continu par leurs threads dedies
+ * (adc_input.c) ; seul l'historique du chart se fige pendant la pause. */
+static void plot_display_visibility_cb(lv_event_t *e)
+{
+    if (lv_event_get_code(e) == LV_EVENT_SCREEN_LOADED) {
+        lv_timer_resume(plot_timer);
+        lv_timer_ready(plot_timer);
+    } else {
+        lv_timer_pause(plot_timer);
+    }
+}
+
 lv_obj_t *plot_display_screen_get(void)
 {
     return plot_display_screen;
@@ -283,7 +298,13 @@ void plot_display_init(void)
         lv_obj_set_pos(legend_label, LEGEND_X + 16, item_y - 2);
     }
 
-    lv_timer_create(plot_timer_cb, PLOT_SAMPLE_PERIOD_MS, NULL);
+    plot_timer = lv_timer_create(plot_timer_cb, PLOT_SAMPLE_PERIOD_MS, NULL);
+    lv_timer_pause(plot_timer);
+
+    lv_obj_add_event_cb(plot_display_screen, plot_display_visibility_cb,
+                         LV_EVENT_SCREEN_LOADED, NULL);
+    lv_obj_add_event_cb(plot_display_screen, plot_display_visibility_cb,
+                         LV_EVENT_SCREEN_UNLOADED, NULL);
 
     lvgl_unlock();
 }

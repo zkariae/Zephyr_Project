@@ -12,6 +12,7 @@
 
 static lv_obj_t *live_variables_screen;
 static lv_obj_t *vars_table;
+static lv_timer_t *vars_timer;
 
 static void back_to_menu_cb(lv_event_t *e)
 {
@@ -43,6 +44,18 @@ static void vars_timer_cb(lv_timer_t *timer)
     lv_table_set_cell_value_fmt(vars_table, 4, 1, "%u", (unsigned int)stack_unused);
     for (int i = 0; i < ADC_CHANNEL_COUNT; i++) {
         lv_table_set_cell_value_fmt(vars_table, 5 + i, 1, "%d", (int)adc_mv[i]);
+    }
+}
+
+/* Le timer ne tourne que lorsque cet ecran est reellement affiche, pour
+ * ne pas charger le thread LVGL en permanence pour un ecran invisible. */
+static void live_variables_visibility_cb(lv_event_t *e)
+{
+    if (lv_event_get_code(e) == LV_EVENT_SCREEN_LOADED) {
+        lv_timer_resume(vars_timer);
+        lv_timer_ready(vars_timer);
+    } else {
+        lv_timer_pause(vars_timer);
     }
 }
 
@@ -90,8 +103,14 @@ void live_variables_init(void)
     lv_table_set_cell_value(vars_table, 7, 0, "Valeur ADC pot2 (mV)");
     lv_table_set_cell_value(vars_table, 8, 0, "Valeur ADC pot3 (mV)");
 
-    lv_timer_create(vars_timer_cb, VARS_REFRESH_PERIOD_MS, NULL);
+    vars_timer = lv_timer_create(vars_timer_cb, VARS_REFRESH_PERIOD_MS, NULL);
+    lv_timer_pause(vars_timer);
     vars_timer_cb(NULL);
+
+    lv_obj_add_event_cb(live_variables_screen, live_variables_visibility_cb,
+                         LV_EVENT_SCREEN_LOADED, NULL);
+    lv_obj_add_event_cb(live_variables_screen, live_variables_visibility_cb,
+                         LV_EVENT_SCREEN_UNLOADED, NULL);
 
     lvgl_unlock();
 }

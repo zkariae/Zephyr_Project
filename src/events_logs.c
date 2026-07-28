@@ -17,6 +17,7 @@ struct event_line {
 static lv_obj_t *events_logs_screen;
 static lv_obj_t *console_container;
 static lv_obj_t *console_label;
+static lv_timer_t *console_timer;
 
 static struct event_line events[EVENTS_LOG_MAX_LINES];
 static size_t events_write_idx;
@@ -81,6 +82,20 @@ static void console_timer_cb(lv_timer_t *timer)
     }
 }
 
+/* Le timer ne tourne que lorsque cet ecran est reellement affiche, pour
+ * ne pas charger le thread LVGL en permanence pour un ecran invisible.
+ * events_logs_add() continue d'ecrire dans le ring buffer independamment
+ * de l'etat du timer : aucune entree n'est perdue pendant la pause. */
+static void events_logs_visibility_cb(lv_event_t *e)
+{
+    if (lv_event_get_code(e) == LV_EVENT_SCREEN_LOADED) {
+        lv_timer_resume(console_timer);
+        lv_timer_ready(console_timer);
+    } else {
+        lv_timer_pause(console_timer);
+    }
+}
+
 lv_obj_t *events_logs_screen_get(void)
 {
     return events_logs_screen;
@@ -114,8 +129,14 @@ void events_logs_init(void)
     lv_obj_set_width(console_label, lv_pct(100));
     lv_label_set_long_mode(console_label, LV_LABEL_LONG_MODE_WRAP);
 
-    lv_timer_create(console_timer_cb, EVENTS_LOG_REFRESH_MS, NULL);
+    console_timer = lv_timer_create(console_timer_cb, EVENTS_LOG_REFRESH_MS, NULL);
+    lv_timer_pause(console_timer);
     console_timer_cb(NULL);
+
+    lv_obj_add_event_cb(events_logs_screen, events_logs_visibility_cb,
+                         LV_EVENT_SCREEN_LOADED, NULL);
+    lv_obj_add_event_cb(events_logs_screen, events_logs_visibility_cb,
+                         LV_EVENT_SCREEN_UNLOADED, NULL);
 
     lvgl_unlock();
 }

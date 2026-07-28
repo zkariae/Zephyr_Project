@@ -9,6 +9,7 @@
 
 static lv_obj_t *system_overview_screen;
 static lv_obj_t *uptime_label;
+static lv_timer_t *uptime_timer;
 
 static void back_to_menu_cb(lv_event_t *e)
 {
@@ -24,6 +25,18 @@ static void uptime_timer_cb(lv_timer_t *timer)
     uint32_t uptime_s = (uint32_t)(k_uptime_get() / 1000);
     printk("[system_overview]: Uptime: %u s\n", uptime_s);
     lv_label_set_text_fmt(uptime_label, "Uptime: %u s", uptime_s);
+}
+
+/* Le timer ne tourne que lorsque cet ecran est reellement affiche, pour
+ * ne pas charger le thread LVGL en permanence pour un ecran invisible. */
+static void system_overview_visibility_cb(lv_event_t *e)
+{
+    if (lv_event_get_code(e) == LV_EVENT_SCREEN_LOADED) {
+        lv_timer_resume(uptime_timer);
+        lv_timer_ready(uptime_timer);
+    } else {
+        lv_timer_pause(uptime_timer);
+    }
 }
 
 lv_obj_t *system_overview_screen_get(void)
@@ -69,8 +82,14 @@ void system_overview_init(void)
 
     uptime_label = lv_label_create(system_overview_screen);
     lv_obj_align(uptime_label, LV_ALIGN_TOP_LEFT, 20, 60 + (int32_t)ARRAY_SIZE(info_lines) * 30);
-    lv_timer_create(uptime_timer_cb, UPTIME_REFRESH_PERIOD_MS, NULL);
+    uptime_timer = lv_timer_create(uptime_timer_cb, UPTIME_REFRESH_PERIOD_MS, NULL);
+    lv_timer_pause(uptime_timer);
     uptime_timer_cb(NULL);
+
+    lv_obj_add_event_cb(system_overview_screen, system_overview_visibility_cb,
+                         LV_EVENT_SCREEN_LOADED, NULL);
+    lv_obj_add_event_cb(system_overview_screen, system_overview_visibility_cb,
+                         LV_EVENT_SCREEN_UNLOADED, NULL);
 
     lvgl_unlock();
 }
