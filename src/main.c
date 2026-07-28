@@ -11,14 +11,16 @@
 #include "splash.h"
 #include "adc_input.h"
 #include "plot_display.h"
+#include "async_printk.h"
 
 #define SPLASH_DELAY_MS 1500
 
 int main(void)
 {
     const struct device *display_dev = DEVICE_DT_GET(DT_CHOSEN(zephyr_display));
-    
-   
+
+    async_printk_init();
+
     printk("[main]: Projet1 demarre, verification de l'ecran...\n");
     events_logs_add("[main] Projet1 demarre");
 
