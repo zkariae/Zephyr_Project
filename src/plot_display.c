@@ -49,6 +49,15 @@ static void x_tick_update(int idx)
         age_ms = 0;
     }
 
+    if (age_ms < 0) {
+        /* Naissance dans le futur (warm-up des 6 premieres secondes) :
+         * le tick n'est pas encore atteint, on le masque pour eviter
+         * qu'il ne deborde sur la zone de legende a droite du chart. */
+        lv_obj_add_flag(x_tick_labels[idx], LV_OBJ_FLAG_HIDDEN);
+        return;
+    }
+    lv_obj_remove_flag(x_tick_labels[idx], LV_OBJ_FLAG_HIDDEN);
+
     int32_t pos_x = CHART_X + CHART_W - (age_ms * CHART_W) / PLOT_WINDOW_MS;
 
     lv_obj_set_x(x_tick_labels[idx], pos_x - X_TICK_LABEL_W / 2);
@@ -138,15 +147,16 @@ void plot_display_init(void)
     }
 
     /* Echelle X (ms) : dynamique, glisse de droite a gauche en meme temps
-     * que les echantillons (voir x_tick_update()). Positions initiales
-     * reparties sur toute la largeur : droite = maintenant (t=0), gauche =
-     * le plus ancien de la fenetre (t=-PLOT_WINDOW_MS). */
+     * que les echantillons (voir x_tick_update()). Compteur de temps
+     * ecoule qui demarre a 0 : les naissances initiales sont reparties
+     * dans le futur (0, +1000, ..., +PLOT_WINDOW_MS) et chaque tick reste
+     * masque tant que son instant n'est pas atteint (age_ms < 0). */
     for (int i = 0; i <= SCALE_DIVS_X; i++) {
         x_tick_labels[i] = lv_label_create(plot_display_screen);
         lv_obj_set_y(x_tick_labels[i], CHART_Y + CHART_H + 2);
         lv_obj_set_width(x_tick_labels[i], X_TICK_LABEL_W);
         lv_obj_set_style_text_align(x_tick_labels[i], LV_TEXT_ALIGN_CENTER, 0);
-        x_tick_time_ms[i] = -(SCALE_DIVS_X - i) * (PLOT_WINDOW_MS / SCALE_DIVS_X);
+        x_tick_time_ms[i] = -(SCALE_DIVS_X - i) * (PLOT_WINDOW_MS / SCALE_DIVS_X) + PLOT_WINDOW_MS;
         x_tick_update(i);
     }
 
