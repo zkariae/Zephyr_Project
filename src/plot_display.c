@@ -4,6 +4,7 @@
 #include "adc_input.h"
 #include <lvgl_zephyr.h>
 #include <zephyr/kernel.h>
+#include <zephyr/sys/util.h>
 
 /* ts du trace = periode d'echantillonnage reelle de l'ADC (voir
  * ADC_SAMPLE_PERIOD_MS dans adc_input.c) : chaque tick fait avancer le
@@ -39,6 +40,92 @@ static lv_chart_series_t *series[ADC_CHANNEL_COUNT];
 static lv_obj_t *x_tick_labels[SCALE_DIVS_X + 1];
 static int32_t x_tick_time_ms[SCALE_DIVS_X + 1];
 static uint32_t plot_now_ms;
+
+/* Echelle Y dynamique : zoom sur la bande de 1000mV qui contient les 4
+ * canaux, avec repli sur [min-20, max] si l'ecart depasse 1000mV. Un
+ * debounce sur l'identite de la bande (pas sur les bornes exactes, qui
+ * varient en continu en mode repli) evite que l'axe ne clignote quand
+ * les valeurs oscillent pile a une frontiere. */
+#define Y_ZONE_DYNAMIC        (-1)
+#define Y_ZONE_NONE           (-2)
+#define Y_RANGE_STABLE_TICKS  3 /* ticks avant de committer un changement de bande */
+#define Y_DYNAMIC_REFRESH_TICKS 3 /* ticks entre deux rescales en mode repli */
+
+static lv_obj_t *y_labels[SCALE_DIVS_Y + 1];
+static int32_t y_range_lo = PLOT_RANGE_MIN_MV;
+static int32_t y_range_hi = PLOT_RANGE_MAX_MV;
+static int y_active_zone = Y_ZONE_NONE;
+static int y_pending_zone = Y_ZONE_NONE;
+static int y_pending_count;
+static int y_dynamic_tick_count;
+
+static void y_labels_refresh(void)
+{
+    for (int i = 0; i <= SCALE_DIVS_Y; i++) {
+        int32_t value = y_range_hi - i * (y_range_hi - y_range_lo) / SCALE_DIVS_Y;
+
+        lv_label_set_text_fmt(y_labels[i], "%d", (int)value);
+    }
+}
+
+static int plot_y_zone_select(int32_t min_mv, int32_t max_mv, int32_t *lo, int32_t *hi)
+{
+    static const int32_t band_lo[] = { 0, 300, 1300, 2300 };
+
+    for (int zone = 0; zone < (int)ARRAY_SIZE(band_lo); zone++) {
+        if (min_mv >= band_lo[zone] && max_mv <= band_lo[zone] + 1000) {
+            *lo = band_lo[zone];
+            *hi = band_lo[zone] + 1000;
+            return zone;
+        }
+    }
+
+    *lo = MAX(min_mv - 20, 0);
+    *hi = MIN(max_mv, PLOT_RANGE_MAX_MV);
+    return Y_ZONE_DYNAMIC;
+}
+
+static void plot_y_range_update(int32_t min_mv, int32_t max_mv)
+{
+    int32_t lo, hi;
+    int zone = plot_y_zone_select(min_mv, max_mv, &lo, &hi);
+
+    if (zone == y_pending_zone) {
+        y_pending_count++;
+    } else {
+        y_pending_zone = zone;
+        y_pending_count = 1;
+    }
+
+    if (zone == y_active_zone && zone == Y_ZONE_DYNAMIC) {
+        /* Deja en mode repli : on suit min/max, mais on limite la
+         * frequence de rescale (sinon l'axe change a chaque tick de
+         * 100ms des que les potars bougent, ce qui donne un refresh
+         * visuel permanent). */
+        y_dynamic_tick_count++;
+        if (y_dynamic_tick_count < Y_DYNAMIC_REFRESH_TICKS) {
+            return;
+        }
+        y_dynamic_tick_count = 0;
+
+        y_range_lo = lo;
+        y_range_hi = hi;
+        lv_chart_set_range(chart, LV_CHART_AXIS_PRIMARY_Y, lo, hi);
+        y_labels_refresh();
+        return;
+    }
+
+    if (y_pending_count < Y_RANGE_STABLE_TICKS || zone == y_active_zone) {
+        return;
+    }
+
+    y_active_zone = zone;
+    y_range_lo = lo;
+    y_range_hi = hi;
+    y_dynamic_tick_count = 0;
+    lv_chart_set_range(chart, LV_CHART_AXIS_PRIMARY_Y, lo, hi);
+    y_labels_refresh();
+}
 
 static void x_tick_update(int idx)
 {
@@ -82,10 +169,17 @@ static void back_to_menu_cb(lv_event_t *e)
 static void plot_timer_cb(lv_timer_t *timer)
 {
     (void)timer;
+    int32_t adc_mv[ADC_CHANNEL_COUNT];
+    int32_t min_mv = PLOT_RANGE_MAX_MV;
+    int32_t max_mv = PLOT_RANGE_MIN_MV;
 
     for (int i = 0; i < ADC_CHANNEL_COUNT; i++) {
-        lv_chart_set_next_value(chart, series[i], adc_input_get_mv(i));
+        adc_mv[i] = adc_input_get_mv(i);
+        lv_chart_set_next_value(chart, series[i], adc_mv[i]);
+        min_mv = MIN(min_mv, adc_mv[i]);
+        max_mv = MAX(max_mv, adc_mv[i]);
     }
+    plot_y_range_update(min_mv, max_mv);
 
     plot_now_ms += PLOT_SAMPLE_PERIOD_MS;
     for (int i = 0; i <= SCALE_DIVS_X; i++) {
@@ -126,7 +220,7 @@ void plot_display_init(void)
     lv_obj_set_size(chart, CHART_W, CHART_H);
     lv_chart_set_type(chart, LV_CHART_TYPE_LINE);
     lv_chart_set_point_count(chart, PLOT_POINT_COUNT);
-    lv_chart_set_range(chart, LV_CHART_AXIS_PRIMARY_Y, PLOT_RANGE_MIN_MV, PLOT_RANGE_MAX_MV);
+    lv_chart_set_range(chart, LV_CHART_AXIS_PRIMARY_Y, y_range_lo, y_range_hi);
     lv_chart_set_update_mode(chart, LV_CHART_UPDATE_MODE_SHIFT);
 
     for (int i = 0; i < ADC_CHANNEL_COUNT; i++) {
@@ -134,17 +228,18 @@ void plot_display_init(void)
                                          LV_CHART_AXIS_PRIMARY_Y);
     }
 
-    /* Echelle Y (mV) : SCALE_DIVS_Y+1 graduations, valeur max en haut. */
+    /* Echelle Y (mV) : SCALE_DIVS_Y+1 graduations, valeur max en haut.
+     * Positions fixes ; le texte est rafraichi dynamiquement par
+     * y_labels_refresh() quand la bande active change (voir
+     * plot_y_range_update()). */
     for (int i = 0; i <= SCALE_DIVS_Y; i++) {
-        lv_obj_t *y_label = lv_label_create(plot_display_screen);
-        int32_t value = PLOT_RANGE_MAX_MV -
-                         i * (PLOT_RANGE_MAX_MV - PLOT_RANGE_MIN_MV) / SCALE_DIVS_Y;
+        y_labels[i] = lv_label_create(plot_display_screen);
 
-        lv_label_set_text_fmt(y_label, "%d", (int)value);
-        lv_obj_set_width(y_label, CHART_X - 4);
-        lv_obj_set_style_text_align(y_label, LV_TEXT_ALIGN_RIGHT, 0);
-        lv_obj_set_pos(y_label, 0, CHART_Y + i * CHART_H / SCALE_DIVS_Y - 7);
+        lv_obj_set_width(y_labels[i], CHART_X - 4);
+        lv_obj_set_style_text_align(y_labels[i], LV_TEXT_ALIGN_RIGHT, 0);
+        lv_obj_set_pos(y_labels[i], 0, CHART_Y + i * CHART_H / SCALE_DIVS_Y - 7);
     }
+    y_labels_refresh();
 
     /* Echelle X (ms) : dynamique, glisse de droite a gauche en meme temps
      * que les echantillons (voir x_tick_update()). Compteur de temps
