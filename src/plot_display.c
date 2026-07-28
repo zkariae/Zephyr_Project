@@ -223,6 +223,12 @@ void plot_display_init(void)
     lv_chart_set_range(chart, LV_CHART_AXIS_PRIMARY_Y, y_range_lo, y_range_hi);
     lv_chart_set_update_mode(chart, LV_CHART_UPDATE_MODE_SHIFT);
 
+    /* Par defaut LVGL dessine un marqueur rond (LV_PART_INDICATOR, rayon
+     * cercle) a chaque echantillon. On le remplace par un tiret plat. */
+    lv_obj_set_style_radius(chart, 0, LV_PART_INDICATOR);
+    lv_obj_set_style_width(chart, 8, LV_PART_INDICATOR);
+    lv_obj_set_style_height(chart, 2, LV_PART_INDICATOR);
+
     for (int i = 0; i < ADC_CHANNEL_COUNT; i++) {
         series[i] = lv_chart_add_series(chart, lv_palette_main(series_palette[i]),
                                          LV_CHART_AXIS_PRIMARY_Y);
