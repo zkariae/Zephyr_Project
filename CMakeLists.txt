@@ -14,4 +14,5 @@ target_sources(app PRIVATE
     src/images/img_image1.c
     src/images/img_image2.c
     src/adc_input.c
+    src/async_printk.c
 )
