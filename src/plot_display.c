@@ -9,7 +9,7 @@
  * ADC_SAMPLE_PERIOD_MS dans adc_input.c) : chaque tick fait avancer le
  * temps affiche de la meme valeur que le materiel echantillonne. */
 #define PLOT_SAMPLE_PERIOD_MS 100
-#define PLOT_POINT_COUNT       60
+#define PLOT_POINT_COUNT       12
 #define PLOT_RANGE_MIN_MV      0
 #define PLOT_RANGE_MAX_MV      3300
 #define PLOT_WINDOW_MS         (PLOT_POINT_COUNT * PLOT_SAMPLE_PERIOD_MS)
