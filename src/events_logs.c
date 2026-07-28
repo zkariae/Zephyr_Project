@@ -22,6 +22,7 @@ static lv_timer_t *console_timer;
 static struct event_line events[EVENTS_LOG_MAX_LINES];
 static size_t events_write_idx;
 static size_t events_count;
+static bool events_dirty;
 
 /* Buffer d'affichage : une ligne horodatee par entree, la plus recente en
  * bas (comme un terminal). +1 pour le '\n' entre lignes. */
@@ -42,6 +43,7 @@ void events_logs_add(const char *fmt, ...)
     if (events_count < EVENTS_LOG_MAX_LINES) {
         events_count++;
     }
+    events_dirty = true;
 }
 
 static void back_to_menu_cb(lv_event_t *e)
@@ -55,11 +57,21 @@ static void back_to_menu_cb(lv_event_t *e)
 static void console_timer_cb(lv_timer_t *timer)
 {
     (void)timer;
+    bool was_at_bottom;
+    size_t start, off = 0;
+
+    /* Evite de reconstruire console_text et de re-set le label (donc un
+     * re-layout LVGL) a chaque tick (500 ms) quand rien de nouveau n'est
+     * arrive depuis le dernier rafraichissement. */
+    if (!events_dirty) {
+        return;
+    }
+    events_dirty = false;
+
     /* Ne recolle en bas que si l'utilisateur n'a pas scrolle vers le haut :
-     * sinon chaque tick (500 ms) lui arrachait le geste tactile des mains. */
-    bool was_at_bottom = lv_obj_get_scroll_bottom(console_container) <= 4;
-    size_t start = (events_count < EVENTS_LOG_MAX_LINES) ? 0 : events_write_idx;
-    size_t off = 0;
+     * sinon chaque tick lui arrachait le geste tactile des mains. */
+    was_at_bottom = lv_obj_get_scroll_bottom(console_container) <= 4;
+    start = (events_count < EVENTS_LOG_MAX_LINES) ? 0 : events_write_idx;
 
     for (size_t i = 0; i < events_count; i++) {
         const struct event_line *line = &events[(start + i) % EVENTS_LOG_MAX_LINES];
