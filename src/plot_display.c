@@ -15,6 +15,11 @@
 #define PLOT_RANGE_MAX_MV      3300
 #define PLOT_WINDOW_MS         (PLOT_POINT_COUNT * PLOT_SAMPLE_PERIOD_MS)
 
+/* Rebasage periodique de plot_now_ms/x_tick_time_ms pour eviter que le
+ * compteur ne grossisse indefiniment (deborde le label X et finit par
+ * changer de signe en int32_t sur les tres longues durees). */
+#define PLOT_TIME_REBASE_THRESHOLD_MS 99999
+
 /* Positionnement absolu (ecran 480x272) : pas d'API de graduation native
  * dans cette version de LVGL (pas de lv_chart_set_axis_tick), les echelles
  * X/Y et la legende sont donc des lv_label places a la main autour du
@@ -150,6 +155,7 @@ static void x_tick_update(int idx)
 
     lv_obj_set_x(x_tick_labels[idx], pos_x - X_TICK_LABEL_W / 2);
     lv_label_set_text_fmt(x_tick_labels[idx], "%d", (int)x_tick_time_ms[idx]);
+
 }
 
 static const lv_palette_t series_palette[ADC_CHANNEL_COUNT] = {
@@ -165,6 +171,26 @@ static void back_to_menu_cb(lv_event_t *e)
     printk("[plot_display]: Back to menu\n");
     events_logs_add("[plot_display] Retour menu");
     lv_screen_load(launcher_screen_get());
+}
+
+/* Retranche le meme offset a plot_now_ms et a tous les x_tick_time_ms[]
+ * une fois le seuil atteint : les differences (age_ms, position a
+ * l'ecran) restent inchangees, seul le nombre affiche redevient petit.
+ * Rebase sur PLOT_WINDOW_MS (pas 0) pour garantir que x_tick_time_ms[]
+ * reste positif (un tick ne peut naitre que jusqu'a PLOT_WINDOW_MS dans
+ * le passe par rapport a plot_now_ms). */
+static void plot_time_rebase_if_needed(void)
+{
+    if (plot_now_ms < PLOT_TIME_REBASE_THRESHOLD_MS) {
+        return;
+    }
+
+    int32_t offset = (int32_t)plot_now_ms - PLOT_WINDOW_MS;
+
+    plot_now_ms -= offset;
+    for (int i = 0; i <= SCALE_DIVS_X; i++) {
+        x_tick_time_ms[i] -= offset;
+    }
 }
 
 static void plot_timer_cb(lv_timer_t *timer)
@@ -183,6 +209,7 @@ static void plot_timer_cb(lv_timer_t *timer)
     plot_y_range_update(min_mv, max_mv);
 
     plot_now_ms += PLOT_SAMPLE_PERIOD_MS;
+    plot_time_rebase_if_needed();
     for (int i = 0; i <= SCALE_DIVS_X; i++) {
         x_tick_update(i);
     }
