@@ -18,6 +18,8 @@ struct task_row {
 static lv_obj_t *rtos_tasks_screen;
 static lv_obj_t *tasks_table;
 static struct task_row tasks[TASKS_MAX_ROWS];
+static struct task_row tasks_prev[TASKS_MAX_ROWS];
+static size_t tasks_prev_count;
 static lv_timer_t *tasks_timer;
 
 static void back_to_menu_cb(lv_event_t *e)
@@ -67,13 +69,25 @@ static void tasks_timer_cb(lv_timer_t *timer)
     size_t count = 0;
 
     k_thread_foreach_unlocked(thread_collect_cb, &count);
-    printk("[rtos_tasks]: Refreshing tasks table, %zu tasks\n", count);
-    lv_table_set_row_count(tasks_table, count + 1);
+
+    /* Ne touche la table (donc son layout LVGL) que pour les lignes qui ont
+     * reellement change : un set_cell_value inconditionnel a chaque tick
+     * (1 s) force un relayout complet de la table, ce qui casse l'animation
+     * de scroll en cours et son effet elastique en haut/bas de la liste. */
+    if (count != tasks_prev_count) {
+        lv_table_set_row_count(tasks_table, count + 1);
+        tasks_prev_count = count;
+    }
+
     for (size_t i = 0; i < count; i++) {
+        if (memcmp(&tasks[i], &tasks_prev[i], sizeof(tasks[i])) == 0) {
+            continue;
+        }
         lv_table_set_cell_value(tasks_table, i + 1, 0, tasks[i].name);
         lv_table_set_cell_value(tasks_table, i + 1, 1, tasks[i].state);
         lv_table_set_cell_value_fmt(tasks_table, i + 1, 2, "%d", tasks[i].prio);
         lv_table_set_cell_value_fmt(tasks_table, i + 1, 3, "%u", (unsigned int)tasks[i].stack_free);
+        tasks_prev[i] = tasks[i];
     }
 }
 
