@@ -6,6 +6,9 @@
 #include "plot_display.h"
 #include <lvgl_zephyr.h>
 
+#define TILE_W 160
+#define TILE_H 136
+
 static lv_obj_t *launcher_screen;
 
 static void open_system_overview(lv_event_t *e)
@@ -48,6 +51,61 @@ static void open_plot_display(lv_event_t *e)
     lv_screen_load(plot_display_screen_get());
 }
 
+/* Cree une tuile bouton pleine case (160x136), fond colore, texte blanc
+ * aligne en haut a gauche, sans coins arrondis ni bordure. */
+static lv_obj_t *create_tile_button(lv_obj_t *parent, int x, int y, lv_color_t color,
+                                     const char *text, lv_event_cb_t cb)
+{
+    lv_obj_t *btn = lv_button_create(parent);
+    lv_obj_set_size(btn, TILE_W, TILE_H);
+    lv_obj_set_pos(btn, x, y);
+    lv_obj_set_style_radius(btn, 0, 0);
+    lv_obj_set_style_border_width(btn, 0, 0);
+    lv_obj_set_style_shadow_width(btn, 0, 0);
+    lv_obj_set_style_outline_width(btn, 0, 0);
+    lv_obj_set_style_bg_color(btn, color, 0);
+    lv_obj_set_style_bg_opa(btn, LV_OPA_COVER, 0);
+    lv_obj_add_event_cb(btn, cb, LV_EVENT_CLICKED, NULL);
+
+    lv_obj_t *label = lv_label_create(btn);
+    lv_label_set_text(label, text);
+    lv_obj_set_style_text_color(label, lv_color_white(), 0);
+    lv_obj_set_style_text_align(label, LV_TEXT_ALIGN_LEFT, 0);
+    lv_obj_align(label, LV_ALIGN_TOP_LEFT, 10, 10);
+
+    return btn;
+}
+
+/* Tuile haut-gauche : statut/horloge statique (pas de RTC dans le projet). */
+static void create_status_tile(lv_obj_t *parent, int x, int y)
+{
+    lv_obj_t *tile = lv_obj_create(parent);
+    lv_obj_set_size(tile, TILE_W, TILE_H);
+    lv_obj_set_pos(tile, x, y);
+    lv_obj_set_style_radius(tile, 0, 0);
+    lv_obj_set_style_border_width(tile, 0, 0);
+    lv_obj_set_style_bg_color(tile, lv_color_white(), 0);
+    lv_obj_set_style_bg_opa(tile, LV_OPA_COVER, 0);
+    lv_obj_clear_flag(tile, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_clear_flag(tile, LV_OBJ_FLAG_CLICKABLE);
+
+    lv_obj_t *connected_label = lv_label_create(tile);
+    lv_label_set_text(connected_label, "Connected");
+    lv_obj_set_style_text_color(connected_label, lv_color_black(), 0);
+    lv_obj_align(connected_label, LV_ALIGN_TOP_LEFT, 8, 6);
+
+    lv_obj_t *time_label = lv_label_create(tile);
+    lv_label_set_text(time_label, "12:11");
+    lv_obj_set_style_text_font(time_label, &lv_font_montserrat_28, 0);
+    lv_obj_set_style_text_color(time_label, lv_color_black(), 0);
+    lv_obj_align(time_label, LV_ALIGN_LEFT_MID, 8, 4);
+
+    lv_obj_t *date_label = lv_label_create(tile);
+    lv_label_set_text(date_label, "30/07/2026");
+    lv_obj_set_style_text_color(date_label, lv_color_black(), 0);
+    lv_obj_align(date_label, LV_ALIGN_BOTTOM_LEFT, 8, -8);
+}
+
 lv_obj_t *launcher_screen_get(void)
 {
     return launcher_screen;
@@ -58,57 +116,24 @@ void launcher_init(void)
     lvgl_lock();
 
     launcher_screen = lv_obj_create(NULL);
+    lv_obj_set_style_pad_all(launcher_screen, 0, 0);
+    lv_obj_set_style_border_width(launcher_screen, 0, 0);
+    lv_obj_clear_flag(launcher_screen, LV_OBJ_FLAG_SCROLLABLE);
 
-    lv_obj_t *title1 = lv_label_create(launcher_screen);
-    lv_label_set_text(title1, "SMART DEBUGGER");
-    lv_obj_align(title1, LV_ALIGN_TOP_LEFT, 10, 10);
+    /* Ligne 1 */
+    create_status_tile(launcher_screen, 0, 0);
+    create_tile_button(launcher_screen, TILE_W, 0, lv_color_hex(0xB71C1C),
+                        "SYSTEM\nOVERVIEW", open_system_overview);
+    create_tile_button(launcher_screen, 2 * TILE_W, 0, lv_color_hex(0x8E2C8F),
+                        "RTOS\nTASKS", open_rtos_info);
 
-    lv_obj_t *syst_btn = lv_button_create(launcher_screen);
-    lv_obj_set_size(syst_btn, 180, 60);
-    lv_obj_align(syst_btn, LV_ALIGN_CENTER, -100, -40);
-    lv_obj_add_event_cb(syst_btn, open_system_overview, LV_EVENT_CLICKED, NULL);
-
-    lv_obj_t *syst_label = lv_label_create(syst_btn);
-    lv_label_set_text(syst_label, "SYSTEM OVERVIEW");
-    lv_obj_center(syst_label);
-
-    lv_obj_t *rtos_btn = lv_button_create(launcher_screen);
-    lv_obj_set_size(rtos_btn, 180, 60);
-    lv_obj_align(rtos_btn, LV_ALIGN_CENTER, 100, -40);
-    lv_obj_add_event_cb(rtos_btn, open_rtos_info, LV_EVENT_CLICKED, NULL);
-
-    lv_obj_t *rtos_label = lv_label_create(rtos_btn);
-    lv_label_set_text(rtos_label, "RTOS TASKS");
-    lv_obj_center(rtos_label);
-
-    lv_obj_t *event_btn = lv_button_create(launcher_screen);
-    lv_obj_set_size(event_btn, 180, 60);
-    lv_obj_align(event_btn, LV_ALIGN_CENTER, -100, 40);
-    lv_obj_add_event_cb(event_btn, open_event_info, LV_EVENT_CLICKED, NULL);
-
-    lv_obj_t *event_label = lv_label_create(event_btn);
-    lv_label_set_text(event_label, "EVENT LOGS");
-    lv_obj_center(event_label);
-
-    lv_obj_t *live_variable_btn = lv_button_create(launcher_screen);
-    lv_obj_set_size(live_variable_btn, 180, 60);
-    lv_obj_align(live_variable_btn, LV_ALIGN_CENTER, 100, 40);
-    lv_obj_add_event_cb(live_variable_btn, open_live_variables, LV_EVENT_CLICKED, NULL);
-
-    lv_obj_t *live_variable_label = lv_label_create(live_variable_btn);
-    lv_label_set_text(live_variable_label, "LIVE VARIABLES");
-    lv_obj_center(live_variable_label);
-
-    lv_obj_t *plot_btn = lv_button_create(launcher_screen);
-    lv_obj_set_size(plot_btn, 180, 60);
-    lv_obj_align(plot_btn, LV_ALIGN_CENTER, 0, 120);
-    lv_obj_add_event_cb(plot_btn, open_plot_display, LV_EVENT_CLICKED, NULL);
-
-    lv_obj_t *plot_label = lv_label_create(plot_btn);
-    lv_label_set_text(plot_label, "PLOT DISPLAY");
-    lv_obj_center(plot_label);
-
-    lv_obj_clear_flag(launcher_screen, LV_OBJ_FLAG_SCROLL_ELASTIC);
+    /* Ligne 2 */
+    create_tile_button(launcher_screen, 0, TILE_H, lv_color_hex(0x00A651),
+                        "PLOT\nDISPLAY", open_plot_display);
+    create_tile_button(launcher_screen, TILE_W, TILE_H, lv_color_hex(0xFFC107),
+                        "EVENT\nLOGS", open_event_info);
+    create_tile_button(launcher_screen, 2 * TILE_W, TILE_H, lv_color_hex(0x1B5E73),
+                        "LIVE\nVARIABLES", open_live_variables);
 
     lv_screen_load(launcher_screen);
 
