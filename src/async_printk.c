@@ -5,18 +5,123 @@
 #include <zephyr/sys/printk.h>
 #include <zephyr/sys/printk-hooks.h>
 #include <zephyr/sys/ring_buffer.h>
+#include <string.h>
 
 #define ASYNC_PRINTK_BUF_SIZE 1024
+#define UART_RX_BUF_SIZE 128
+
+/* Format attendu, envoye par tools/send_time.py :
+ * "<HH:MM:SS,DD/MM/YYYY>" (sans le \n, qui sert de separateur de trame). */
+#define FRAME_LEN (1 + ASYNC_PRINTK_TIME_LEN + 1 + ASYNC_PRINTK_DATE_LEN + 1)
+#define CONNECTED_TIMEOUT_MS 3000
 
 static const struct device *console_dev = DEVICE_DT_GET(DT_CHOSEN(zephyr_console));
 
 RING_BUF_DECLARE(tx_rb, ASYNC_PRINTK_BUF_SIZE);
 static struct k_spinlock produce_lock;
 
+/* Reception (PC -> board, ex. script Python send_time.py) : l'ISR se
+ * contente de vider la FIFO UART dans ce ring buffer, tout traitement
+ * (parsing) est reporte sur la system workqueue via rx_work pour ne pas
+ * alourdir le contexte ISR. */
+RING_BUF_DECLARE(rx_rb, UART_RX_BUF_SIZE);
+static struct k_work rx_work;
+
+/* Dernier statut de liaison decode, protege par link_lock (ecrit par
+ * rx_work_handler sur la system workqueue, lu par le lv_timer du launcher
+ * sur le workqueue LVGL). */
+static struct {
+    char time_str[ASYNC_PRINTK_TIME_LEN + 1];
+    char date_str[ASYNC_PRINTK_DATE_LEN + 1];
+    int64_t last_rx_uptime;
+    bool has_data;
+} link_status;
+static struct k_spinlock link_lock;
+
+/* Accumulateur de ligne courante (entre deux '\n'), vide a chaque trame. */
+static char line_buf[FRAME_LEN];
+static size_t line_len;
+static bool line_overflow;
+
+static bool frame_is_valid(const char *buf, size_t len)
+{
+    return len == FRAME_LEN &&
+           buf[0] == '<' && buf[FRAME_LEN - 1] == '>' &&
+           buf[3] == ':' && buf[6] == ':' &&
+           buf[9] == ',' && buf[12] == '/' && buf[15] == '/';
+}
+
+static void frame_apply(const char *buf)
+{
+    k_spinlock_key_t key = k_spin_lock(&link_lock);
+
+    memcpy(link_status.time_str, &buf[1], ASYNC_PRINTK_TIME_LEN);
+    link_status.time_str[ASYNC_PRINTK_TIME_LEN] = '\0';
+    memcpy(link_status.date_str, &buf[10], ASYNC_PRINTK_DATE_LEN);
+    link_status.date_str[ASYNC_PRINTK_DATE_LEN] = '\0';
+    link_status.last_rx_uptime = k_uptime_get();
+    link_status.has_data = true;
+
+    k_spin_unlock(&link_lock, key);
+}
+
+static void rx_work_handler(struct k_work *work)
+{
+    ARG_UNUSED(work);
+    uint8_t byte;
+
+    while (ring_buf_get(&rx_rb, &byte, 1) == 1) {
+        if (byte == '\n') {
+            if (!line_overflow && frame_is_valid(line_buf, line_len)) {
+                frame_apply(line_buf);
+            }
+            line_len = 0;
+            line_overflow = false;
+            continue;
+        }
+
+        if (line_len < FRAME_LEN) {
+            line_buf[line_len++] = (char)byte;
+        } else {
+            /* Ligne plus longue que prevu (bruit/desync) : on l'ignore
+             * jusqu'au prochain '\n' plutot que de deborder line_buf. */
+            line_overflow = true;
+        }
+    }
+}
+
+bool async_printk_get_link_status(char time_out[ASYNC_PRINTK_TIME_LEN + 1],
+                                   char date_out[ASYNC_PRINTK_DATE_LEN + 1],
+                                   bool *connected)
+{
+    k_spinlock_key_t key = k_spin_lock(&link_lock);
+
+    bool has_data = link_status.has_data;
+
+    if (has_data) {
+        memcpy(time_out, link_status.time_str, sizeof(link_status.time_str));
+        memcpy(date_out, link_status.date_str, sizeof(link_status.date_str));
+    }
+    *connected = has_data &&
+                 (k_uptime_get() - link_status.last_rx_uptime) < CONNECTED_TIMEOUT_MS;
+
+    k_spin_unlock(&link_lock, key);
+
+    return has_data;
+}
+
 static void uart_isr(const struct device *dev, void *user_data)
 {
     ARG_UNUSED(user_data);
     uart_irq_update(dev);
+
+    if (uart_irq_rx_ready(dev)) {
+        uint8_t c;
+        while (uart_fifo_read(dev, &c, 1) == 1) {
+            ring_buf_put(&rx_rb, &c, 1);
+        }
+        k_work_submit(&rx_work);
+    }
 
     if (!uart_irq_tx_ready(dev)) {
         return;
@@ -55,6 +160,8 @@ static int async_char_out(int c)
 
 void async_printk_init(void)
 {
+    k_work_init(&rx_work, rx_work_handler);
     uart_irq_callback_set(console_dev, uart_isr);
+    uart_irq_rx_enable(console_dev);
     __printk_hook_install(async_char_out);
 }
