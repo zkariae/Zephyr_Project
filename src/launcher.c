@@ -4,12 +4,18 @@
 #include "events_logs.h"
 #include "live_variables.h"
 #include "plot_display.h"
+#include "async_printk.h"
 #include <lvgl_zephyr.h>
+#include <string.h>
 
 #define TILE_W 160
 #define TILE_H 136
+#define STATUS_TILE_REFRESH_MS 1000
 
 static lv_obj_t *launcher_screen;
+static lv_obj_t *status_connected_label;
+static lv_obj_t *status_time_label;
+static lv_obj_t *status_date_label;
 
 static void open_system_overview(lv_event_t *e)
 {
@@ -78,7 +84,38 @@ static lv_obj_t *create_tile_button(lv_obj_t *parent, int x, int y, lv_color_t c
     return btn;
 }
 
-/* Tuile haut-gauche : statut/horloge statique (pas de RTC dans le projet). */
+/* Rafraichit les 3 labels de la tuile statut a partir du dernier statut de
+ * liaison recu par UART (voir async_printk_get_link_status). N'ecrit un
+ * label que si son texte a change, pour eviter des invalidations LVGL
+ * inutiles a chaque tick. */
+static void status_tile_timer_cb(lv_timer_t *timer)
+{
+    (void)timer;
+    char time_str[ASYNC_PRINTK_TIME_LEN + 1];
+    char date_str[ASYNC_PRINTK_DATE_LEN + 1];
+    bool connected;
+    bool has_data = async_printk_get_link_status(time_str, date_str, &connected);
+
+    const char *connected_text = connected ? "Connected" : "Disconnected";
+    if (strcmp(lv_label_get_text(status_connected_label), connected_text) != 0) {
+        lv_label_set_text(status_connected_label, connected_text);
+        lv_obj_set_style_text_color(status_connected_label,
+                                     connected ? lv_color_hex(0x00A651) : lv_color_hex(0xB71C1C),
+                                     0);
+    }
+
+    if (has_data) {
+        if (strcmp(lv_label_get_text(status_time_label), time_str) != 0) {
+            lv_label_set_text(status_time_label, time_str);
+        }
+        if (strcmp(lv_label_get_text(status_date_label), date_str) != 0) {
+            lv_label_set_text(status_date_label, date_str);
+        }
+    }
+}
+
+/* Tuile haut-gauche : statut/horloge/date recus en direct via UART depuis
+ * tools/send_time.py (pas de RTC dans le projet, le PC fait autorite). */
 static void create_status_tile(lv_obj_t *parent, int x, int y)
 {
     lv_obj_t *tile = lv_obj_create(parent);
@@ -91,21 +128,23 @@ static void create_status_tile(lv_obj_t *parent, int x, int y)
     lv_obj_clear_flag(tile, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_clear_flag(tile, LV_OBJ_FLAG_CLICKABLE);
 
-    lv_obj_t *connected_label = lv_label_create(tile);
-    lv_label_set_text(connected_label, "Connected");
-    lv_obj_set_style_text_color(connected_label, lv_color_black(), 0);
-    lv_obj_align(connected_label, LV_ALIGN_TOP_LEFT, 8, 6);
+    status_connected_label = lv_label_create(tile);
+    lv_label_set_text(status_connected_label, "Disconnected");
+    lv_obj_set_style_text_color(status_connected_label, lv_color_hex(0xB71C1C), 0);
+    lv_obj_align(status_connected_label, LV_ALIGN_TOP_LEFT, 8, 6);
 
-    lv_obj_t *time_label = lv_label_create(tile);
-    lv_label_set_text(time_label, "12:11");
-    lv_obj_set_style_text_font(time_label, &lv_font_montserrat_28, 0);
-    lv_obj_set_style_text_color(time_label, lv_color_black(), 0);
-    lv_obj_align(time_label, LV_ALIGN_LEFT_MID, 8, 4);
+    status_time_label = lv_label_create(tile);
+    lv_label_set_text(status_time_label, "--:--:--");
+    lv_obj_set_style_text_font(status_time_label, &lv_font_montserrat_28, 0);
+    lv_obj_set_style_text_color(status_time_label, lv_color_black(), 0);
+    lv_obj_align(status_time_label, LV_ALIGN_LEFT_MID, 8, 4);
 
-    lv_obj_t *date_label = lv_label_create(tile);
-    lv_label_set_text(date_label, "30/07/2026");
-    lv_obj_set_style_text_color(date_label, lv_color_black(), 0);
-    lv_obj_align(date_label, LV_ALIGN_BOTTOM_LEFT, 8, -8);
+    status_date_label = lv_label_create(tile);
+    lv_label_set_text(status_date_label, "--/--/----");
+    lv_obj_set_style_text_color(status_date_label, lv_color_black(), 0);
+    lv_obj_align(status_date_label, LV_ALIGN_BOTTOM_LEFT, 8, -8);
+
+    lv_timer_create(status_tile_timer_cb, STATUS_TILE_REFRESH_MS, NULL);
 }
 
 lv_obj_t *launcher_screen_get(void)
