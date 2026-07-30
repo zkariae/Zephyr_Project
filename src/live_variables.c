@@ -86,12 +86,18 @@ void live_variables_init(void)
     vars_table = lv_table_create(live_variables_screen);
     lv_table_set_column_count(vars_table, 2);
     lv_table_set_row_count(vars_table, VARS_ROW_CNT + 1);
-    lv_table_set_column_width(vars_table, 0, 180);
-    lv_table_set_column_width(vars_table, 1, 100);
+    /* Colonnes = toute la largeur de l'ecran (480px) */
+    lv_table_set_column_width(vars_table, 0, 340);
+    lv_table_set_column_width(vars_table, 1, 140);
     lv_obj_set_style_pad_top(vars_table, 5, LV_PART_ITEMS);
     lv_obj_set_style_pad_bottom(vars_table, 5, LV_PART_ITEMS);
-    lv_obj_align(vars_table, LV_ALIGN_TOP_LEFT, 20, 60);
-    
+    /* Hauteur fixe : garde un espace visible entre le bas du tableau et le
+     * bas de l'ecran (272px de haut), au lieu de laisser le tableau
+     * s'etendre jusqu'au contenu. */
+    lv_obj_set_height(vars_table, 197);
+    lv_obj_align(vars_table, LV_ALIGN_TOP_LEFT, 0, 60);
+    lv_obj_clear_flag(vars_table, LV_OBJ_FLAG_SCROLL_ELASTIC);
+
 
     lv_table_set_cell_value(vars_table, 0, 0, "Variable");
     lv_table_set_cell_value(vars_table, 0, 1, "Valeur");
@@ -103,6 +109,7 @@ void live_variables_init(void)
     lv_table_set_cell_value(vars_table, 6, 0, "Valeur ADC pot1 (mV)");
     lv_table_set_cell_value(vars_table, 7, 0, "Valeur ADC pot2 (mV)");
     lv_table_set_cell_value(vars_table, 8, 0, "Valeur ADC pot3 (mV)");
+
 
     lv_obj_clear_flag(live_variables_screen, LV_OBJ_FLAG_SCROLL_ELASTIC);
 
