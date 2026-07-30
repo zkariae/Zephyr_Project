@@ -130,3 +130,17 @@
 	};
 };
 
+/*
+ * USART1 (console + liaison PC->board pour tools/send_time.py) : le board
+ * defaut (115200 bauds) laisse ~87us par octet. Le classique USART du
+ * STM32F7 n'a pas de FIFO materiel (contrairement aux series plus recentes)
+ * - un seul retard d'interruption RX au-dela de cette fenetre ecrase
+ * l'octet en cours (overrun silencieux). A 9600 bauds, ~1ms par octet
+ * (~12x plus de marge), largement suffisant pour absorber la latence
+ * d'interruption observee en pratique. Cote PC, tools/send_time.py doit
+ * utiliser le meme debit (BAUDRATE = 9600).
+ */
+&usart1 {
+	current-speed = <9600>;
+};
+
