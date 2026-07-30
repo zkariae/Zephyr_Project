@@ -91,6 +91,7 @@ void live_variables_init(void)
     lv_obj_set_style_pad_top(vars_table, 5, LV_PART_ITEMS);
     lv_obj_set_style_pad_bottom(vars_table, 5, LV_PART_ITEMS);
     lv_obj_align(vars_table, LV_ALIGN_TOP_LEFT, 20, 60);
+    
 
     lv_table_set_cell_value(vars_table, 0, 0, "Variable");
     lv_table_set_cell_value(vars_table, 0, 1, "Valeur");
@@ -102,6 +103,8 @@ void live_variables_init(void)
     lv_table_set_cell_value(vars_table, 6, 0, "Valeur ADC pot1 (mV)");
     lv_table_set_cell_value(vars_table, 7, 0, "Valeur ADC pot2 (mV)");
     lv_table_set_cell_value(vars_table, 8, 0, "Valeur ADC pot3 (mV)");
+
+    lv_obj_clear_flag(live_variables_screen, LV_OBJ_FLAG_SCROLL_ELASTIC);
 
     vars_timer = lv_timer_create(vars_timer_cb, VARS_REFRESH_PERIOD_MS, NULL);
     lv_timer_pause(vars_timer);

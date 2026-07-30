@@ -137,6 +137,7 @@ void rtos_tasks_init(void)
     lv_obj_set_style_pad_bottom(tasks_table, 4, LV_PART_ITEMS);
     lv_obj_set_size(tasks_table, 390, 190);
     lv_obj_align(tasks_table, LV_ALIGN_TOP_LEFT, 20, 60);
+    lv_obj_clear_flag(tasks_table, LV_OBJ_FLAG_SCROLL_ELASTIC);
 
     lv_table_set_cell_value(tasks_table, 0, 0, "Thread");
     lv_table_set_cell_value(tasks_table, 0, 1, "Etat");

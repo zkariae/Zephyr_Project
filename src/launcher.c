@@ -108,6 +108,7 @@ void launcher_init(void)
     lv_label_set_text(plot_label, "PLOT DISPLAY");
     lv_obj_center(plot_label);
 
+    lv_obj_clear_flag(launcher_screen, LV_OBJ_FLAG_SCROLL_ELASTIC);
 
     lv_screen_load(launcher_screen);
 

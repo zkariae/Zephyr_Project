@@ -141,6 +141,8 @@ void events_logs_init(void)
     lv_obj_set_width(console_label, lv_pct(100));
     lv_label_set_long_mode(console_label, LV_LABEL_LONG_MODE_WRAP);
 
+    lv_obj_clear_flag(console_container, LV_OBJ_FLAG_SCROLL_ELASTIC);
+
     console_timer = lv_timer_create(console_timer_cb, EVENTS_LOG_REFRESH_MS, NULL);
     lv_timer_pause(console_timer);
     console_timer_cb(NULL);
