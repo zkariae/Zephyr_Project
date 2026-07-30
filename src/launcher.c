@@ -65,12 +65,14 @@ static lv_obj_t *create_tile_button(lv_obj_t *parent, int x, int y, lv_color_t c
     lv_obj_set_style_outline_width(btn, 0, 0);
     lv_obj_set_style_bg_color(btn, color, 0);
     lv_obj_set_style_bg_opa(btn, LV_OPA_COVER, 0);
+    lv_obj_clear_flag(btn, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_add_event_cb(btn, cb, LV_EVENT_CLICKED, NULL);
 
     lv_obj_t *label = lv_label_create(btn);
     lv_label_set_text(label, text);
     lv_obj_set_style_text_color(label, lv_color_white(), 0);
     lv_obj_set_style_text_align(label, LV_TEXT_ALIGN_LEFT, 0);
+    lv_obj_set_style_text_font(label, &lv_font_montserrat_20, 0);
     lv_obj_align(label, LV_ALIGN_TOP_LEFT, 10, 10);
 
     return btn;
