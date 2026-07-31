@@ -10,6 +10,7 @@
 #include "launcher.h"
 #include "splash.h"
 #include "adc_input.h"
+#include "temperature.h"
 #include "plot_display.h"
 #include "async_printk.h"
 
@@ -54,6 +55,8 @@ int main(void)
     printk("[main]: events_logs_init OK\n");
         
     adc_input_init();
+
+    temperature_init();
 
     live_variables_init();
     printk("[main]: live_variables_init OK\n");

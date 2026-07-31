@@ -131,6 +131,22 @@
 };
 
 /*
+ * Capteur de temperature interne et VREFINT : noeuds tout faits de
+ * zephyr/dts/arm/st/f7/stm32f7.dtsi ("st,stm32-temp-cal" / "st,stm32-vref"),
+ * juste desactives par defaut. Tous deux passent par ADC1 (canaux 18 et 17,
+ * internes au die - pas de pin/pinctrl requis), le meme ADC deja utilise
+ * par pot0 ci-dessus ; le driver Zephyr (src/temperature.c) gere lui-meme
+ * le multiplexage et la calibration usine.
+ */
+&die_temp {
+	status = "okay";
+};
+
+&vref {
+	status = "okay";
+};
+
+/*
  * USART1 (console + liaison PC->board pour tools/send_time.py) : le board
  * defaut (115200 bauds) laisse ~87us par octet. Le classique USART du
  * STM32F7 n'a pas de FIFO materiel (contrairement aux series plus recentes)
