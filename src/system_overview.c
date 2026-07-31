@@ -1,6 +1,7 @@
 #include "system_overview.h"
 #include "launcher.h"
 #include "events_logs.h"
+#include "temperature.h"
 #include <lvgl_zephyr.h>
 #include <zephyr/kernel.h>
 #include <zephyr/sys/util.h>
@@ -9,6 +10,8 @@
 
 static lv_obj_t *system_overview_screen;
 static lv_obj_t *uptime_label;
+static lv_obj_t *die_temp_label;
+static lv_obj_t *vref_label;
 static lv_timer_t *uptime_timer;
 
 static void back_to_menu_cb(lv_event_t *e)
@@ -25,6 +28,20 @@ static void uptime_timer_cb(lv_timer_t *timer)
     uint32_t uptime_s = (uint32_t)(k_uptime_get() / 1000);
     printk("[system_overview]: Uptime: %u s\n", uptime_s);
     lv_label_set_text_fmt(uptime_label, "Uptime: %u s", uptime_s);
+
+    /* temperature_get_die_centi_c()/temperature_get_vref_mv() ne font
+     * qu'un atomic_get (voir temperature.c) : aucun risque de bloquer le
+     * thread LVGL ici, contrairement a un sensor_sample_fetch() direct. */
+    int32_t die_centi_c = temperature_get_die_centi_c();
+    int32_t whole = die_centi_c / 100;
+    int32_t frac = die_centi_c % 100;
+
+    if (frac < 0) {
+        frac = -frac;
+    }
+    lv_label_set_text_fmt(die_temp_label, "Die temp: %d.%02d C", (int)whole, (int)frac);
+
+    lv_label_set_text_fmt(vref_label, "VREF+ (VDDA): %d mV", (int)temperature_get_vref_mv());
 }
 
 /* Le timer ne tourne que lorsque cet ecran est reellement affiche, pour
@@ -82,6 +99,13 @@ void system_overview_init(void)
 
     uptime_label = lv_label_create(system_overview_screen);
     lv_obj_align(uptime_label, LV_ALIGN_TOP_LEFT, 20, 60 + (int32_t)ARRAY_SIZE(info_lines) * 30);
+
+    die_temp_label = lv_label_create(system_overview_screen);
+    lv_obj_align(die_temp_label, LV_ALIGN_TOP_LEFT, 20, 60 + (int32_t)(ARRAY_SIZE(info_lines) + 1) * 30);
+
+    vref_label = lv_label_create(system_overview_screen);
+    lv_obj_align(vref_label, LV_ALIGN_TOP_LEFT, 20, 60 + (int32_t)(ARRAY_SIZE(info_lines) + 2) * 30);
+
     uptime_timer = lv_timer_create(uptime_timer_cb, UPTIME_REFRESH_PERIOD_MS, NULL);
     lv_timer_pause(uptime_timer);
     uptime_timer_cb(NULL);
