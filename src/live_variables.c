@@ -72,7 +72,8 @@ void live_variables_init(void)
 
     lv_obj_t *title = lv_label_create(live_variables_screen);
     lv_label_set_text(title, "LIVE VARIABLES");
-    lv_obj_align(title, LV_ALIGN_TOP_MID, 0, 10);
+    lv_obj_set_style_text_font(title, &lv_font_montserrat_24, 0);
+    lv_obj_align(title, LV_ALIGN_TOP_MID, 0, 16);
 
     lv_obj_t *back_btn = lv_button_create(live_variables_screen);
     lv_obj_set_size(back_btn, 80, 30);
@@ -82,6 +83,34 @@ void live_variables_init(void)
     lv_obj_t *back_label = lv_label_create(back_btn);
     lv_label_set_text(back_label, "Menu");
     lv_obj_center(back_label);
+
+    /* Badge "Live" : pastille verte + texte, purement visuel */
+    lv_obj_t *live_badge = lv_obj_create(live_variables_screen);
+    lv_obj_set_size(live_badge, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
+    lv_obj_set_style_radius(live_badge, LV_RADIUS_CIRCLE, 0);
+    lv_obj_set_style_bg_color(live_badge, lv_color_hex(0xE6F7ED), 0);
+    lv_obj_set_style_bg_opa(live_badge, LV_OPA_COVER, 0);
+    lv_obj_set_style_border_width(live_badge, 0, 0);
+    lv_obj_set_style_pad_hor(live_badge, 10, 0);
+    lv_obj_set_style_pad_ver(live_badge, 4, 0);
+    lv_obj_set_style_pad_column(live_badge, 4, 0);
+    lv_obj_set_flex_flow(live_badge, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(live_badge, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_clear_flag(live_badge, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_clear_flag(live_badge, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_align(live_badge, LV_ALIGN_TOP_RIGHT, -10, 16);
+
+    lv_obj_t *live_dot = lv_obj_create(live_badge);
+    lv_obj_set_size(live_dot, 8, 8);
+    lv_obj_set_style_radius(live_dot, LV_RADIUS_CIRCLE, 0);
+    lv_obj_set_style_bg_color(live_dot, lv_color_hex(0x2F9E44), 0);
+    lv_obj_set_style_bg_opa(live_dot, LV_OPA_COVER, 0);
+    lv_obj_set_style_border_width(live_dot, 0, 0);
+    lv_obj_clear_flag(live_dot, LV_OBJ_FLAG_SCROLLABLE);
+
+    lv_obj_t *live_label = lv_label_create(live_badge);
+    lv_label_set_text(live_label, "Live");
+    lv_obj_set_style_text_color(live_label, lv_color_hex(0x2F9E44), 0);
 
     vars_table = lv_table_create(live_variables_screen);
     lv_table_set_column_count(vars_table, 2);
