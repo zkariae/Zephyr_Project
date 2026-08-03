@@ -96,7 +96,7 @@ static void status_tile_timer_cb(lv_timer_t *timer)
     bool connected;
     bool has_data = async_printk_get_link_status(time_str, date_str, &connected);
 
-    const char *connected_text = connected ? "Connected" : "Disconnected";
+    const char *connected_text = connected ? LV_SYMBOL_USB " Connected" : LV_SYMBOL_USB " Disconnected";
     if (strcmp(lv_label_get_text(status_connected_label), connected_text) != 0) {
         lv_label_set_text(status_connected_label, connected_text);
         lv_obj_set_style_text_color(status_connected_label,
