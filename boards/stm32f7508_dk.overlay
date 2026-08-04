@@ -77,6 +77,17 @@
 	st,adc-prescaler = <4>;
 	status = "okay";
 
+	/*
+	 * DMA2 Stream0 / Channel0 : couple confirme via STM32CubeMX
+	 * (HAL_ADC_MspInit genere pour ADC1 -> hdma_adc1.Instance =
+	 * DMA2_Stream0, hdma_adc1.Init.Channel = DMA_CHANNEL_0), le RM0385
+	 * n'etait pas assez explicite seul pour distinguer ce couple parmi
+	 * les alternatives possibles pour ADC1/ADC3 sur DMA2.
+	 */
+	dmas = <&dma2 0 0 (STM32_DMA_PERIPH_RX | STM32_DMA_MEM_16BITS |
+			   STM32_DMA_PERIPH_16BITS) STM32_DMA_FIFO_FULL>;
+	dma-names = "dma";
+
 	#address-cells = <1>;
 	#size-cells = <0>;
 
@@ -95,6 +106,16 @@
 	pinctrl-names = "default";
 	st,adc-prescaler = <4>;
 	status = "okay";
+
+	/*
+	 * DMA2 Stream1 / Channel2 : stream distinct de celui d'ADC1
+	 * (Stream0) car les deux tournent en parallele - deux peripheriques
+	 * ne peuvent pas partager le meme stream materiel simultanement.
+	 * Couple confirme via STM32CubeMX (HAL_ADC_MspInit genere pour ADC3).
+	 */
+	dmas = <&dma2 1 2 (STM32_DMA_PERIPH_RX | STM32_DMA_MEM_16BITS |
+			   STM32_DMA_PERIPH_16BITS) STM32_DMA_FIFO_FULL>;
+	dma-names = "dma";
 
 	#address-cells = <1>;
 	#size-cells = <0>;
@@ -120,6 +141,10 @@
 		zephyr,acquisition-time = <ADC_ACQ_TIME_DEFAULT>;
 		zephyr,resolution = <12>;
 	};
+};
+
+&dma2 {
+	status = "okay";
 };
 
 
