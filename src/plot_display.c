@@ -6,11 +6,21 @@
 #include <zephyr/kernel.h>
 #include <zephyr/sys/util.h>
 
-/* ts du trace = periode d'echantillonnage reelle de l'ADC (voir
- * ADC_SAMPLE_PERIOD_MS dans adc_input.c) : chaque tick fait avancer le
- * temps affiche de la meme valeur que le materiel echantillonne. */
-#define PLOT_SAMPLE_PERIOD_MS 100
-#define PLOT_POINT_COUNT       12
+/*
+ * Periode du timer de rafraichissement du chart. Diagnostic (west attach +
+ * GDB) : a 20ms (50Hz), le redessin complet de la courbe (jusqu'a
+ * POINT_COUNT-1 segments par serie x ADC_CHANNEL_COUNT series, chacun un
+ * rectangle antialiase via lv_draw_rect sur un layer buffer en SDRAM)
+ * prend plus de temps que la periode elle-meme. lv_timer_handler()
+ * (LVGL sur workqueue, CONFIG_LV_Z_RUN_LVGL_ON_WORKQUEUE=y) traite aussi
+ * la lecture tactile (indev) dans le meme appel, une seule fois par
+ * iteration : un redessin qui n'en finit pas monopolise ce thread et fait
+ * rater les prises/relachements tactiles rapides (ex. bouton Menu) en plus
+ * de donner l'impression que la courbe est figee. 100ms laisse largement
+ * le temps au rendu de suivre.
+ */
+#define PLOT_SAMPLE_PERIOD_MS  100
+#define PLOT_POINT_COUNT       30
 #define PLOT_RANGE_MIN_MV      0
 #define PLOT_RANGE_MAX_MV      3300
 #define PLOT_WINDOW_MS         (PLOT_POINT_COUNT * PLOT_SAMPLE_PERIOD_MS)
