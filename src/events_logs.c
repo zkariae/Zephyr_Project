@@ -121,7 +121,8 @@ void events_logs_init(void)
 
     lv_obj_t *title = lv_label_create(events_logs_screen);
     lv_label_set_text(title, "EVENT LOGS");
-    lv_obj_align(title, LV_ALIGN_TOP_MID, 0, 10);
+    lv_obj_set_style_text_font(title, &lv_font_montserrat_24, 0);
+    lv_obj_align(title, LV_ALIGN_TOP_MID, 0, 16);
 
     lv_obj_t *back_btn = lv_button_create(events_logs_screen);
     lv_obj_set_size(back_btn, 80, 30);
@@ -133,8 +134,8 @@ void events_logs_init(void)
     lv_obj_center(back_label);
 
     console_container = lv_obj_create(events_logs_screen);
-    lv_obj_set_size(console_container, 440, 190);
-    lv_obj_align(console_container, LV_ALIGN_TOP_LEFT, 20, 60);
+    lv_obj_set_size(console_container, 460, 202);
+    lv_obj_align(console_container, LV_ALIGN_TOP_MID, 0, 60);
     lv_obj_set_scroll_dir(console_container, LV_DIR_VER);
 
     console_label = lv_label_create(console_container);
