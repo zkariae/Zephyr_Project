@@ -116,7 +116,8 @@ void rtos_tasks_init(void)
 
     lv_obj_t *title = lv_label_create(rtos_tasks_screen);
     lv_label_set_text(title, "RTOS TASKS");
-    lv_obj_align(title, LV_ALIGN_TOP_MID, 0, 10);
+    lv_obj_set_style_text_font(title, &lv_font_montserrat_24, 0);
+    lv_obj_align(title, LV_ALIGN_TOP_MID, 0, 16);
 
     lv_obj_t *back_btn = lv_button_create(rtos_tasks_screen);
     lv_obj_set_size(back_btn, 80, 30);
@@ -129,14 +130,18 @@ void rtos_tasks_init(void)
 
     tasks_table = lv_table_create(rtos_tasks_screen);
     lv_table_set_column_count(tasks_table, 4);
-    lv_table_set_column_width(tasks_table, 0, 150);
-    lv_table_set_column_width(tasks_table, 1, 90);
-    lv_table_set_column_width(tasks_table, 2, 50);
-    lv_table_set_column_width(tasks_table, 3, 100);
-    lv_obj_set_style_pad_top(tasks_table, 4, LV_PART_ITEMS);
-    lv_obj_set_style_pad_bottom(tasks_table, 4, LV_PART_ITEMS);
-    lv_obj_set_size(tasks_table, 390, 190);
-    lv_obj_align(tasks_table, LV_ALIGN_TOP_LEFT, 20, 60);
+    /* Colonnes = toute la largeur de l'ecran (480px) */
+    lv_table_set_column_width(tasks_table, 0, 190);
+    lv_table_set_column_width(tasks_table, 1, 110);
+    lv_table_set_column_width(tasks_table, 2, 60);
+    lv_table_set_column_width(tasks_table, 3, 120);
+    lv_obj_set_style_pad_top(tasks_table, 5, LV_PART_ITEMS);
+    lv_obj_set_style_pad_bottom(tasks_table, 5, LV_PART_ITEMS);
+    /* Hauteur fixe : garde un espace visible entre le bas du tableau et le
+     * bas de l'ecran (272px de haut), au lieu de laisser le tableau
+     * s'etendre jusqu'au contenu. */
+    lv_obj_set_height(tasks_table, 197);
+    lv_obj_align(tasks_table, LV_ALIGN_TOP_LEFT, 0, 60);
     lv_obj_clear_flag(tasks_table, LV_OBJ_FLAG_SCROLL_ELASTIC);
 
     lv_table_set_cell_value(tasks_table, 0, 0, "Thread");
