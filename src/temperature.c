@@ -98,6 +98,7 @@ int temperature_init(void)
                      TEMPERATURE_THREAD_STACK_SIZE, temperature_sample_thread,
                      NULL, NULL, NULL,
                      TEMPERATURE_THREAD_PRIORITY, 0, K_NO_WAIT);
+    k_thread_name_set(&temperature_thread, "temperature_sample");
 
     return 0;
 }

@@ -132,6 +132,7 @@ int adc_input_init(void)
     k_thread_create(&adc_thread_data, adc_thread_stack, ADC_THREAD_STACK_SIZE,
                      adc_sample_thread, NULL, NULL, NULL,
                      ADC_THREAD_PRIORITY, 0, K_NO_WAIT);
+    k_thread_name_set(&adc_thread_data, "adc_sample");
 
     return 0;
 }
