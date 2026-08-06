@@ -185,3 +185,16 @@
 	current-speed = <9600>;
 };
 
+/*
+ * Watchdog materiel IWDG : noeud tout fait de
+ * zephyr/dts/arm/st/f7/stm32f7.dtsi ("st,stm32-watchdog"), juste
+ * desactive par defaut. Alimente par un timer interne dedie (LSI, ~32
+ * kHz) independant du coeur - il redemarre la carte si personne ne
+ * l'entretient plus, quelle qu'en soit la raison (fault, deadlock,
+ * thread qui monopolise le CPU). Configure et nourri depuis
+ * src/watchdog.c.
+ */
+&iwdg {
+	status = "okay";
+};
+

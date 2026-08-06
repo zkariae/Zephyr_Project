@@ -16,4 +16,5 @@ target_sources(app PRIVATE
     src/adc_input.c
     src/temperature.c
     src/async_printk.c
+    src/watchdog.c
 )

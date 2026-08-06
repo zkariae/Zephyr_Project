@@ -13,6 +13,7 @@
 #include "temperature.h"
 #include "plot_display.h"
 #include "async_printk.h"
+#include "watchdog.h"
 
 #define SPLASH_DELAY_MS 1500
 
@@ -32,6 +33,8 @@ int main(void)
     }
     printk("[main]: Ecran pret\n");
     events_logs_add("[main] Ecran pret");
+
+    watchdog_init();
 
     splash_show_image1();
 
@@ -73,6 +76,7 @@ int main(void)
 
     while (1) {
         k_sleep(K_SECONDS(1));
+        watchdog_feed();
     }
 
     return 0;
