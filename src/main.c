@@ -34,7 +34,10 @@ int main(void)
     printk("[main]: Ecran pret\n");
     events_logs_add("[main] Ecran pret");
 
-    watchdog_init();
+    if (watchdog_init() != 0) {
+        printk("[main]: watchdog_init ECHEC (pas de filet de securite IWDG)\n");
+        events_logs_add("[main] watchdog_init ECHEC");
+    }
 
     splash_show_image1();
 
@@ -57,9 +60,19 @@ int main(void)
     events_logs_init();
     printk("[main]: events_logs_init OK\n");
         
-    adc_input_init();
+    if (adc_input_init() != 0) {
+        printk("[main]: adc_input_init ECHEC\n");
+        events_logs_add("[main] adc_input_init ECHEC");
+    } else {
+        printk("[main]: adc_input_init OK\n");
+    }
 
-    temperature_init();
+    if (temperature_init() != 0) {
+        printk("[main]: temperature_init ECHEC\n");
+        events_logs_add("[main] temperature_init ECHEC");
+    } else {
+        printk("[main]: temperature_init OK\n");
+    }
 
     live_variables_init();
     printk("[main]: live_variables_init OK\n");
