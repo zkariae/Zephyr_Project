@@ -23,6 +23,8 @@ int main(void)
 
     async_printk_init();
 
+    watchdog_report_reset_cause();
+
     printk("[main]: Projet1 demarre, verification de l'ecran...\n");
     events_logs_add("[main] Projet1 demarre");
 

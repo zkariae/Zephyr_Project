@@ -1,7 +1,9 @@
 #include "watchdog.h"
+#include "events_logs.h"
 #include <zephyr/kernel.h>
 #include <zephyr/device.h>
 #include <zephyr/drivers/watchdog.h>
+#include <zephyr/drivers/hwinfo.h>
 
 /*
  * &iwdg est defini (desactive) dans zephyr/dts/arm/st/f7/stm32f7.dtsi et
@@ -59,4 +61,25 @@ int watchdog_init(void)
 void watchdog_feed(void)
 {
     wdt_feed(iwdg_dev, wdt_channel_id);
+}
+
+/* Distingue au boot un reset watchdog/logiciel (plantage) d'un demarrage normal. */
+void watchdog_report_reset_cause(void)
+{
+    uint32_t cause = 0;
+    const char *msg;
+
+    hwinfo_get_reset_cause(&cause);
+    hwinfo_clear_reset_cause();
+
+    if (cause & RESET_WATCHDOG) {
+        msg = "[boot] Reset watchdog (IWDG) - plantage probable au cycle precedent";
+    } else if (cause & RESET_SOFTWARE) {
+        msg = "[boot] Reset logiciel - probable fault CPU (CONFIG_RESET_ON_FATAL_ERROR)";
+    } else {
+        msg = "[boot] Demarrage normal (reset pin/POR/brownout)";
+    }
+
+    printk("%s\n", msg);
+    events_logs_add(msg);
 }
