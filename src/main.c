@@ -1,3 +1,10 @@
+/**
+ * @file
+ * @brief Application entry point: boots the display, runs the splash
+ *        sequence, then initializes every screen module and the
+ *        background watchdog feed loop.
+ */
+
 #include <zephyr/kernel.h>
 #include <zephyr/device.h>
 #include <zephyr/drivers/display.h>
@@ -82,7 +89,7 @@ int main(void)
     plot_display_init();
     printk("[main]: plot_display_init OK\n");
 
-    launcher_init(); /* construit le launcher et l'affiche (lv_screen_load) */
+    launcher_init(); /* Builds and loads the launcher screen (lv_screen_load). */
     printk("[main]: launcher_init OK, ecran charge\n");
     events_logs_add("[main] Boot termine, launcher affiche");
 

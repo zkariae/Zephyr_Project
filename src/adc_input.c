@@ -1,3 +1,8 @@
+/**
+ * @file
+ * @brief Samples the 4 potentiometer ADC channels from a dedicated thread.
+ */
+
 #include "adc_input.h"
 #include <zephyr/kernel.h>
 #include <zephyr/device.h>
@@ -28,24 +33,16 @@ static struct k_thread adc_thread_data;
 
 static atomic_t adc_values_mv[ARRAY_SIZE(adc_chans)];
 
-/*
- * __nocache (+ alignement sur la taille de ligne DCACHE, 32 octets sur ce
- * coeur) : le driver adc_stm32 refuse tout buffer DMA qui ne serait pas
- * dans une region non-cacheable, faute de cache-maintenance automatique
- * sur les transferts DMA (voir soc/st/stm32/common/stm32_cache.c).
- */
+/* DMA buffers: __nocache + 32-byte alignment, required by adc_stm32 since
+ * DMA gets no automatic cache maintenance. */
 
-/* pot0 seul sur ADC1 (DMA2 Stream0/Channel0, cf overlay). */
+/* pot0 alone on ADC1 (DMA2 Stream0/Channel0, see overlay). */
 static __aligned(32) uint16_t adc1_buffer[1] __nocache;
 
-/*
- * pot1/pot2/pot3 partagent ADC3 (canaux 8/7/6) et sont scannes en une
- * seule conversion DMA (DMA2 Stream1/Channel2, cf overlay) au lieu de 3
- * lectures serialisees. Le sequenceur restitue les echantillons par ordre
- * croissant de numero de canal (6, 7, 8) - inverse de l'ordre pot1/pot2/
- * pot3 declare dans le devicetree - d'ou la table de correspondance
- * explicite plutot que de supposer l'ordre du tableau adc_chans[].
- */
+/* pot1/pot2/pot3 share ADC3, scanned in one DMA conversion (channels
+ * 8/7/6). Sequencer returns samples in ascending channel order, which is
+ * reversed vs. the devicetree pot1/pot2/pot3 order - hence the lookup
+ * table below instead of assuming adc_chans[] order. */
 static __aligned(32) uint16_t adc3_buffer[3] __nocache;
 static const int adc3_scan_order_to_pot[3] = { POT3, POT2, POT1 };
 

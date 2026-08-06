@@ -1,3 +1,8 @@
+/**
+ * @file
+ * @brief Boot splash screens.
+ */
+
 #include "splash.h"
 #include <lvgl_zephyr.h>
 

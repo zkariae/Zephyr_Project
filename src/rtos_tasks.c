@@ -1,3 +1,9 @@
+/**
+ * @file
+ * @brief RTOS thread monitor: table of live threads, state, priority, and
+ *        free stack.
+ */
+
 #include "rtos_tasks.h"
 #include "launcher.h"
 #include "events_logs.h"
@@ -30,7 +36,7 @@ static void back_to_menu_cb(lv_event_t *e)
     lv_screen_load(launcher_screen_get());
 }
 
-/* Appele par k_thread_foreach_unlocked() pour chaque thread vivant. */
+/* Called by k_thread_foreach_unlocked() for each live thread. */
 static void thread_collect_cb(const struct k_thread *cthread, void *user_data)
 {
     size_t *count = user_data;
@@ -70,10 +76,6 @@ static void tasks_timer_cb(lv_timer_t *timer)
 
     k_thread_foreach_unlocked(thread_collect_cb, &count);
 
-    /* Ne touche la table (donc son layout LVGL) que pour les lignes qui ont
-     * reellement change : un set_cell_value inconditionnel a chaque tick
-     * (1 s) force un relayout complet de la table, ce qui casse l'animation
-     * de scroll en cours et son effet elastique en haut/bas de la liste. */
     if (count != tasks_prev_count) {
         lv_table_set_row_count(tasks_table, count + 1);
         tasks_prev_count = count;
@@ -91,8 +93,8 @@ static void tasks_timer_cb(lv_timer_t *timer)
     }
 }
 
-/* Le timer ne tourne que lorsque cet ecran est reellement affiche, pour
- * ne pas charger le thread LVGL en permanence pour un ecran invisible. */
+/* Refresh timer only runs while this screen is visible, to spare the LVGL
+ * thread. */
 static void rtos_tasks_visibility_cb(lv_event_t *e)
 {
     if (lv_event_get_code(e) == LV_EVENT_SCREEN_LOADED) {
@@ -130,16 +132,15 @@ void rtos_tasks_init(void)
 
     tasks_table = lv_table_create(rtos_tasks_screen);
     lv_table_set_column_count(tasks_table, 4);
-    /* Colonnes = toute la largeur de l'ecran (480px) */
+    /* Columns span the full screen width (480px). */
     lv_table_set_column_width(tasks_table, 0, 190);
     lv_table_set_column_width(tasks_table, 1, 110);
     lv_table_set_column_width(tasks_table, 2, 60);
     lv_table_set_column_width(tasks_table, 3, 120);
     lv_obj_set_style_pad_top(tasks_table, 5, LV_PART_ITEMS);
     lv_obj_set_style_pad_bottom(tasks_table, 5, LV_PART_ITEMS);
-    /* Hauteur fixe : garde un espace visible entre le bas du tableau et le
-     * bas de l'ecran (272px de haut), au lieu de laisser le tableau
-     * s'etendre jusqu'au contenu. */
+    /* Fixed height, to leave a visible gap above the bottom of the
+     * screen instead of the table growing to fit its content. */
     lv_obj_set_height(tasks_table, 197);
     lv_obj_align(tasks_table, LV_ALIGN_TOP_LEFT, 0, 60);
     lv_obj_clear_flag(tasks_table, LV_OBJ_FLAG_SCROLL_ELASTIC);

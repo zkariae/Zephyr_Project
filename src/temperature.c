@@ -1,29 +1,23 @@
+/**
+ * @file
+ * @brief Background sampling of the die temperature and VREF+ sensors.
+ */
+
 #include "temperature.h"
 #include <zephyr/kernel.h>
 #include <zephyr/device.h>
 #include <zephyr/drivers/sensor.h>
 
-/*
- * die_temp et vref sont deja definis dans zephyr/dts/arm/st/f7/stm32f7.dtsi
- * ("st,stm32-temp-cal" / "st,stm32-vref"), juste desactives par defaut -
- * on les active dans boards/stm32f7508_dk.overlay. Contrairement aux
- * potentiometres (adc_input.c), le driver Zephyr lit lui-meme le canal ADC1
- * concerne (18 = capteur de temperature interne, 17 = VREFINT) et applique
- * la formule de calibration usine (TS_CAL1/TS_CAL2 en OTP) : pas besoin de
- * refaire ces calculs a la main avec adc_read().
- */
+/* die_temp/vref nodes are defined in stm32f7.dtsi, enabled in our board
+ * overlay. Unlike adc_input.c, the driver handles the ADC channel and
+ * factory calibration itself. */
 static const struct device *const die_temp_dev = DEVICE_DT_GET(DT_NODELABEL(die_temp));
 static const struct device *const vref_dev = DEVICE_DT_GET(DT_NODELABEL(vref));
 
 #define TEMPERATURE_THREAD_STACK_SIZE 1024
 
-/*
- * Meme priorite que ADC_THREAD_PRIORITY (adc_input.c) : die_temp/vref
- * partagent l'instance ADC1 avec le thread pot0, serialises sur le meme
- * k_sem interne au driver (adc_context) sans heritage de priorite. Une
- * priorite differente exposerait a la meme inversion de priorite que
- * celle documentee dans adc_input.c pour pot1/pot2/pot3 sur ADC3.
- */
+/* Same priority as ADC_THREAD_PRIORITY (adc_input.c): die_temp/vref share
+ * ADC1 with the pot0 thread, serialized without priority inheritance. */
 #define TEMPERATURE_THREAD_PRIORITY 5
 #define TEMPERATURE_SAMPLE_PERIOD_MS 1000
 
@@ -33,14 +27,8 @@ static struct k_thread temperature_thread;
 static atomic_t die_centi_c;
 static atomic_t vref_mv;
 
-/*
- * sensor_sample_fetch() est bloquant (conversion ADC + eventuelle attente
- * du semaphore adc_context partage avec pot0). L'isoler dans son propre
- * thread, avec le resultat mis en cache dans des atomic_t, evite de
- * bloquer l'appelant (notamment le thread LVGL, qui rafraichit l'ecran
- * Live Variables chaque seconde) - meme logique que adc_input.c pour
- * les potentiometres.
- */
+/* sensor_sample_fetch() blocks; isolate it in its own thread and cache the
+ * result in atomic_t so callers (e.g. LVGL) never block on it. */
 static void temperature_sample_thread(void *p1, void *p2, void *p3)
 {
     ARG_UNUSED(p1);

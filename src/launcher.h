@@ -1,14 +1,20 @@
+/**
+ * @file
+ * @brief Home screen: grid of tiles to open each app screen.
+ */
+
 #ifndef LAUNCHER_H_
 #define LAUNCHER_H_
 
 #include <lvgl.h>
 
-/* Construit l'ecran d'accueil et l'affiche (lv_screen_load). A appeler une
- * seule fois au demarrage, apres l'init de l'ecran calculatrice et alarme
- * (leurs boutons referencent calculator_screen_get() / alarm_screen_get()). */
+/**
+ * @brief Build and load the launcher screen. Call once at startup, after
+ *        all other screen modules have been initialized.
+ */
 void launcher_init(void);
 
-/* Ecran d'accueil, utilise par les autres ecrans pour le bouton "Menu". */
+/** @brief Get the launcher screen, used by other screens for the "Menu" button. */
 lv_obj_t *launcher_screen_get(void);
 
 #endif /* LAUNCHER_H_ */

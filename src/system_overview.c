@@ -1,3 +1,9 @@
+/**
+ * @file
+ * @brief System overview screen: board info, uptime, die temperature,
+ *        and VREF+, refreshed by timer.
+ */
+
 #include "system_overview.h"
 #include "launcher.h"
 #include "events_logs.h"
@@ -14,9 +20,6 @@
 #define SCREEN_W 480
 #define SCREEN_H 272
 
-/* "card" : rectangle blanc, sans ombre (cout de rendu logiciel trop eleve
- * sur ce MCU, voir CONFIG_STM32_LTDC_FB_NUM=2 dans prj.conf pour le
- * precedent deja rencontre sur ce projet). */
 #define CARD_MARGIN 8
 #define CARD_W (SCREEN_W - 2 * CARD_MARGIN)
 #define CARD_H (SCREEN_H - 2 * CARD_MARGIN)
@@ -34,10 +37,7 @@
 #define ROW_H_BAR    32
 #define ROWS_START_Y 42
 
-/* Plages de remplissage des barres : jonction STM32F7 (0-85 C, limite haute
- * datasheet) et VDDA nominal (3.0-3.6 V, plage de tolerance alimentation du
- * chip) - donnent une lecture visuelle immediate au lieu d'une barre
- * toujours pleine. */
+/* Bar ranges: STM32F7 junction temp (0-85 C) and nominal VDDA (3.0-3.6 V). */
 #define DIE_TEMP_BAR_MIN_CENTI_C 0
 #define DIE_TEMP_BAR_MAX_CENTI_C 8500
 #define VREF_BAR_MIN_MV 3000
@@ -61,9 +61,7 @@ static void back_to_menu_cb(lv_event_t *e)
     lv_screen_load(launcher_screen_get());
 }
 
-/* Met a jour un label uniquement si le texte formatte a change, pour ne
- * pas invalider/redessiner un widget dont la valeur affichee est identique
- * (meme logique que status_tile_timer_cb dans launcher.c). */
+/* Only updates the label if the text actually changed. */
 static void label_set_text_if_changed(lv_obj_t *label, const char *text)
 {
     if (strcmp(lv_label_get_text(label), text) != 0) {
@@ -71,11 +69,9 @@ static void label_set_text_if_changed(lv_obj_t *label, const char *text)
     }
 }
 
-/* Cree une ligne "icone + libelle + valeur" dans la carte, a la position Y
- * donnee. Si bar_out n'est pas NULL, ajoute une fine barre de progression
- * sous la valeur (temperature/VREF) ; l'appelant est alors responsable de
- * reserver ROW_H_BAR (au lieu de ROW_H) pour cette ligne. Retourne le label
- * de valeur, pour que l'appelant puisse le mettre a jour periodiquement. */
+/* Icon + label + value row at the given Y. If bar_out is non-NULL, adds a
+ * thin progress bar below the value (caller must then reserve ROW_H_BAR
+ * instead of ROW_H). Returns the value label for periodic updates. */
 static lv_obj_t *create_row(lv_obj_t *parent, int32_t y, const char *icon,
                              const char *label_text, const char *initial_value,
                              lv_obj_t **bar_out)
@@ -138,9 +134,7 @@ static void refresh_timer_cb(lv_timer_t *timer)
     snprintf(buf, sizeof(buf), "%u s", uptime_s);
     label_set_text_if_changed(uptime_value_label, buf);
 
-    /* temperature_get_die_centi_c()/temperature_get_vref_mv() ne font
-     * qu'un atomic_get (voir temperature.c) : aucun risque de bloquer le
-     * thread LVGL ici, contrairement a un sensor_sample_fetch() direct. */
+    /* Just an atomic_get (see temperature.c), safe to call from LVGL. */
     int32_t die_centi_c = temperature_get_die_centi_c();
     int32_t whole = die_centi_c / 100;
     int32_t frac = die_centi_c % 100;
@@ -158,8 +152,8 @@ static void refresh_timer_cb(lv_timer_t *timer)
     lv_bar_set_value(vref_bar, vref_mv, LV_ANIM_OFF);
 }
 
-/* Le timer ne tourne que lorsque cet ecran est reellement affiche, pour
- * ne pas charger le thread LVGL en permanence pour un ecran invisible. */
+/* Refresh timer only runs while this screen is visible, to spare the LVGL
+ * thread. */
 static void system_overview_visibility_cb(lv_event_t *e)
 {
     if (lv_event_get_code(e) == LV_EVENT_SCREEN_LOADED) {
@@ -179,9 +173,8 @@ void system_overview_init(void)
 {
     lvgl_lock();
 
-    /* Pas de bg_color explicite ici : on garde le theme par defaut, pour
-     * que le fond soit exactement le meme que celui de Live Variables
-     * (qui ne le surcharge pas non plus). */
+    /* No explicit bg_color: keeps the default theme background, matching
+     * Live Variables. */
     system_overview_screen = lv_obj_create(NULL);
     lv_obj_clear_flag(system_overview_screen, LV_OBJ_FLAG_SCROLLABLE);
 
@@ -217,8 +210,7 @@ void system_overview_init(void)
     lv_obj_set_style_text_color(clock_label, lv_color_hex(COLOR_LABEL_FG), 0);
     lv_obj_align(clock_label, LV_ALIGN_TOP_RIGHT, -ROW_PAD_X, 12);
 
-    /* Separateur fin sous l'en-tete : simple rectangle plat (pas de flou),
-     * dessine une seule fois - ne rejoue jamais dans le timer de rafraichissement. */
+    /* Thin flat divider under the header, drawn once. */
     lv_obj_t *divider = lv_obj_create(card);
     lv_obj_set_size(divider, CARD_W - 2 * ROW_PAD_X, 1);
     lv_obj_set_pos(divider, ROW_PAD_X, ROWS_START_Y - 6);
@@ -228,10 +220,7 @@ void system_overview_init(void)
     lv_obj_clear_flag(divider, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_clear_flag(divider, LV_OBJ_FLAG_CLICKABLE);
 
-    /* Valeurs sourcees depuis .config/devicetree/linker.cmd (build_projet1) :
-     * CPU = CONFIG_SYS_CLOCK_HW_CYCLES_PER_SEC (PLL HSE 25MHz*432/25/2 = 216MHz) ;
-     * Flash = fenetre XIP QSPI a 0x90000000 (CONFIG_FLASH_SIZE/BASE_ADDRESS) ;
-     * RAM = SRAM interne (CONFIG_SRAM_SIZE) + SDRAM externe (sdram1, framebuffer LVGL). */
+    /* Hardcoded board specs, sourced from the build's .config/devicetree. */
     int32_t y = ROWS_START_Y;
 
     create_row(card, y, LV_SYMBOL_HOME, "Board", "STM32F7508-DK", NULL);

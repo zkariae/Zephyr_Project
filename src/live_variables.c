@@ -1,3 +1,9 @@
+/**
+ * @file
+ * @brief Live variables screen: heap stats and ADC readings in a table,
+ *        refreshed by timer.
+ */
+
 #include "live_variables.h"
 #include "launcher.h"
 #include "events_logs.h"
@@ -47,8 +53,8 @@ static void vars_timer_cb(lv_timer_t *timer)
     }
 }
 
-/* Le timer ne tourne que lorsque cet ecran est reellement affiche, pour
- * ne pas charger le thread LVGL en permanence pour un ecran invisible. */
+/* Refresh timer only runs while this screen is visible, to spare the LVGL
+ * thread. */
 static void live_variables_visibility_cb(lv_event_t *e)
 {
     if (lv_event_get_code(e) == LV_EVENT_SCREEN_LOADED) {
@@ -84,7 +90,7 @@ void live_variables_init(void)
     lv_label_set_text(back_label, "Menu");
     lv_obj_center(back_label);
 
-    /* Badge "Live" : pastille verte + texte, purement visuel */
+    /* "Live" badge: green dot + text, purely visual. */
     lv_obj_t *live_badge = lv_obj_create(live_variables_screen);
     lv_obj_set_size(live_badge, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
     lv_obj_set_style_radius(live_badge, LV_RADIUS_CIRCLE, 0);
@@ -115,14 +121,13 @@ void live_variables_init(void)
     vars_table = lv_table_create(live_variables_screen);
     lv_table_set_column_count(vars_table, 2);
     lv_table_set_row_count(vars_table, VARS_ROW_CNT + 1);
-    /* Colonnes = toute la largeur de l'ecran (480px) */
+    /* Columns span the full screen width (480px). */
     lv_table_set_column_width(vars_table, 0, 340);
     lv_table_set_column_width(vars_table, 1, 140);
     lv_obj_set_style_pad_top(vars_table, 5, LV_PART_ITEMS);
     lv_obj_set_style_pad_bottom(vars_table, 5, LV_PART_ITEMS);
-    /* Hauteur fixe : garde un espace visible entre le bas du tableau et le
-     * bas de l'ecran (272px de haut), au lieu de laisser le tableau
-     * s'etendre jusqu'au contenu. */
+    /* Fixed height, to leave a visible gap above the bottom of the
+     * screen instead of the table growing to fit its content. */
     lv_obj_set_height(vars_table, 197);
     lv_obj_align(vars_table, LV_ALIGN_TOP_LEFT, 0, 60);
     lv_obj_clear_flag(vars_table, LV_OBJ_FLAG_SCROLL_ELASTIC);

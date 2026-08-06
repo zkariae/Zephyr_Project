@@ -1,3 +1,8 @@
+/**
+ * @file
+ * @brief Interrupt-driven printk() backend and UART link-status decoder.
+ */
+
 #include "async_printk.h"
 #include <zephyr/kernel.h>
 #include <zephyr/device.h>
@@ -10,8 +15,8 @@
 #define ASYNC_PRINTK_BUF_SIZE 1024
 #define UART_RX_BUF_SIZE 128
 
-/* Format attendu, envoye par tools/send_time.py :
- * "<HH:MM:SS,DD/MM/YYYY>" (sans le \n, qui sert de separateur de trame). */
+/* Frame format sent by tools/send_time.py: "<HH:MM:SS,DD/MM/YYYY>",
+ * '\n'-terminated. */
 #define FRAME_LEN (1 + ASYNC_PRINTK_TIME_LEN + 1 + ASYNC_PRINTK_DATE_LEN + 1)
 #define CONNECTED_TIMEOUT_MS 3000
 
@@ -20,16 +25,15 @@ static const struct device *console_dev = DEVICE_DT_GET(DT_CHOSEN(zephyr_console
 RING_BUF_DECLARE(tx_rb, ASYNC_PRINTK_BUF_SIZE);
 static struct k_spinlock produce_lock;
 
-/* Reception (PC -> board, ex. script Python send_time.py) : l'ISR se
- * contente de vider la FIFO UART dans ce ring buffer, tout traitement
- * (parsing) est reporte sur la system workqueue via rx_work pour ne pas
- * alourdir le contexte ISR. */
+/* RX (PC -> board): the ISR only drains the UART FIFO into this ring
+ * buffer; parsing is deferred to rx_work on the system workqueue to keep
+ * ISR context light. */
 RING_BUF_DECLARE(rx_rb, UART_RX_BUF_SIZE);
 static struct k_work rx_work;
 
-/* Dernier statut de liaison decode, protege par link_lock (ecrit par
- * rx_work_handler sur la system workqueue, lu par le lv_timer du launcher
- * sur le workqueue LVGL). */
+/* Last decoded link status, guarded by link_lock (written by
+ * rx_work_handler on the system workqueue, read by the launcher's lv_timer
+ * on the LVGL workqueue). */
 static struct {
     char time_str[ASYNC_PRINTK_TIME_LEN + 1];
     char date_str[ASYNC_PRINTK_DATE_LEN + 1];
@@ -38,7 +42,7 @@ static struct {
 } link_status;
 static struct k_spinlock link_lock;
 
-/* Accumulateur de ligne courante (entre deux '\n'), vide a chaque trame. */
+/* Current line accumulator (between two '\n'), reset each frame. */
 static char line_buf[FRAME_LEN];
 static size_t line_len;
 static bool line_overflow;
@@ -83,8 +87,8 @@ static void rx_work_handler(struct k_work *work)
         if (line_len < FRAME_LEN) {
             line_buf[line_len++] = (char)byte;
         } else {
-            /* Ligne plus longue que prevu (bruit/desync) : on l'ignore
-             * jusqu'au prochain '\n' plutot que de deborder line_buf. */
+            /* Line longer than expected (noise/desync): ignore it until
+             * the next '\n' instead of overflowing line_buf. */
             line_overflow = true;
         }
     }
@@ -134,13 +138,9 @@ static void uart_isr(const struct device *dev, void *user_data)
     uart_irq_tx_disable(dev);
 }
 
-/* Remplace le hook de sortie "poll driven" de printk() (uart_console.c,
- * console_out() -> uart_poll_out(), bloquant octet par octet) par un
- * buffer circulaire draine par interruption UART. Plusieurs threads
- * appellent printk() concurremment (main, threads ADC, workqueue LVGL),
- * d'ou le spinlock cote ecriture ; la lecture reste single-consumer
- * (l'ISR), donc lock-free de ce cote. Buffer plein = octets tronques,
- * pas de blocage. */
+/* Ring-buffer printk() output, drained via UART IRQ instead of the default
+ * blocking uart_poll_out(). Write side locked (multiple callers); ISR read
+ * side is single-consumer, lock-free. Full buffer truncates, never blocks. */
 static int async_char_out(int c)
 {
     uint8_t byte = (uint8_t)c;

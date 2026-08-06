@@ -1,3 +1,8 @@
+/**
+ * @file
+ * @brief Live line chart of the 4 ADC channels.
+ */
+
 #include "plot_display.h"
 #include "launcher.h"
 #include "events_logs.h"
@@ -6,40 +11,24 @@
 #include <zephyr/kernel.h>
 #include <zephyr/sys/util.h>
 
-/*
- * Periode du timer de rafraichissement du chart. Diagnostic (west attach +
- * GDB) : a 20ms (50Hz), le redessin complet de la courbe (jusqu'a
- * POINT_COUNT-1 segments par serie x ADC_CHANNEL_COUNT series, chacun un
- * rectangle antialiase via lv_draw_rect sur un layer buffer en SDRAM)
- * prend plus de temps que la periode elle-meme. lv_timer_handler()
- * (LVGL sur workqueue, CONFIG_LV_Z_RUN_LVGL_ON_WORKQUEUE=y) traite aussi
- * la lecture tactile (indev) dans le meme appel, une seule fois par
- * iteration : un redessin qui n'en finit pas monopolise ce thread et fait
- * rater les prises/relachements tactiles rapides (ex. bouton Menu) en plus
- * de donner l'impression que la courbe est figee. 100ms laisse largement
- * le temps au rendu de suivre.
- */
 #define PLOT_SAMPLE_PERIOD_MS  100
 #define PLOT_POINT_COUNT       30
 #define PLOT_RANGE_MIN_MV      0
 #define PLOT_RANGE_MAX_MV      3300
 #define PLOT_WINDOW_MS         (PLOT_POINT_COUNT * PLOT_SAMPLE_PERIOD_MS)
 
-/* Rebasage periodique de plot_now_ms/x_tick_time_ms pour eviter que le
- * compteur ne grossisse indefiniment (deborde le label X et finit par
- * changer de signe en int32_t sur les tres longues durees). */
+/* Rebase threshold: keeps plot_now_ms from growing unbounded and
+ * eventually overflowing int32_t. */
 #define PLOT_TIME_REBASE_THRESHOLD_MS 99999
 
-/* Positionnement absolu (ecran 480x272) : pas d'API de graduation native
- * dans cette version de LVGL (pas de lv_chart_set_axis_tick), les echelles
- * X/Y et la legende sont donc des lv_label places a la main autour du
- * graphique. */
+/* Absolute layout for a 480x272 screen: this LVGL version has no axis-tick
+ * API, so X/Y scales and legend are hand-placed lv_labels. */
 #define CHART_X       38
 #define CHART_Y       46
 #define CHART_W       380
 #define CHART_H       190
-#define SCALE_DIVS_Y  6   /* 7 graduations mV : pas de 550 mV */
-#define SCALE_DIVS_X  6   /* 7 graduations temps : pas de 1000 ms */
+#define SCALE_DIVS_Y  6   /* 7 ticks, 550 mV apart */
+#define SCALE_DIVS_X  6   /* 7 ticks, 1000 ms apart */
 #define LEGEND_X      (CHART_X + CHART_W + 8)
 #define X_TICK_LABEL_W 50
 
@@ -48,24 +37,16 @@ static lv_obj_t *chart;
 static lv_chart_series_t *series[ADC_CHANNEL_COUNT];
 static lv_timer_t *plot_timer;
 
-/* Chaque graduation temps est ancree a l'instant ou elle a ete emise
- * (x_tick_time_ms) et glisse vers la gauche au meme rythme que les
- * echantillons du chart (LV_CHART_UPDATE_MODE_SHIFT) : elle reste ainsi
- * au niveau X de l'echantillon auquel elle correspond. Quand elle sort a
- * gauche, elle est recyclee a droite avec l'instant courant. */
+/* Each tick label stays anchored to its sample's timestamp and slides left
+ * with the chart; it's recycled on the right once it scrolls off. */
 static lv_obj_t *x_tick_labels[SCALE_DIVS_X + 1];
 static int32_t x_tick_time_ms[SCALE_DIVS_X + 1];
 static uint32_t plot_now_ms;
 
-/* Echelle Y dynamique : zoom sur la bande de 1000mV qui contient les 4
- * canaux, avec repli sur [min-20, max] si l'ecart depasse 1000mV. Un
- * debounce sur l'identite de la bande (pas sur les bornes exactes, qui
- * varient en continu en mode repli) evite que l'axe ne clignote quand
- * les valeurs oscillent pile a une frontiere. */
 #define Y_ZONE_DYNAMIC        (-1)
 #define Y_ZONE_NONE           (-2)
-#define Y_RANGE_STABLE_TICKS  3 /* ticks avant de committer un changement de bande */
-#define Y_DYNAMIC_REFRESH_TICKS 3 /* ticks entre deux rescales en mode repli */
+#define Y_RANGE_STABLE_TICKS  3 /* ticks before committing a zone change */
+#define Y_DYNAMIC_REFRESH_TICKS 3 /* ticks between rescales in fallback mode */
 
 static lv_obj_t *y_labels[SCALE_DIVS_Y + 1];
 static int32_t y_range_lo = PLOT_RANGE_MIN_MV;
@@ -114,10 +95,7 @@ static void plot_y_range_update(int32_t min_mv, int32_t max_mv)
     }
 
     if (zone == y_active_zone && zone == Y_ZONE_DYNAMIC) {
-        /* Deja en mode repli : on suit min/max, mais on limite la
-         * frequence de rescale (sinon l'axe change a chaque tick de
-         * 100ms des que les potars bougent, ce qui donne un refresh
-         * visuel permanent). */
+        /* Already in fallback mode: throttle rescale frequency. */
         y_dynamic_tick_count++;
         if (y_dynamic_tick_count < Y_DYNAMIC_REFRESH_TICKS) {
             return;
@@ -153,9 +131,7 @@ static void x_tick_update(int idx)
     }
 
     if (age_ms < 0) {
-        /* Naissance dans le futur (warm-up des 6 premieres secondes) :
-         * le tick n'est pas encore atteint, on le masque pour eviter
-         * qu'il ne deborde sur la zone de legende a droite du chart. */
+        /* Tick not reached yet (startup warm-up): hide it. */
         lv_obj_add_flag(x_tick_labels[idx], LV_OBJ_FLAG_HIDDEN);
         return;
     }
@@ -183,12 +159,8 @@ static void back_to_menu_cb(lv_event_t *e)
     lv_screen_load(launcher_screen_get());
 }
 
-/* Retranche le meme offset a plot_now_ms et a tous les x_tick_time_ms[]
- * une fois le seuil atteint : les differences (age_ms, position a
- * l'ecran) restent inchangees, seul le nombre affiche redevient petit.
- * Rebase sur PLOT_WINDOW_MS (pas 0) pour garantir que x_tick_time_ms[]
- * reste positif (un tick ne peut naitre que jusqu'a PLOT_WINDOW_MS dans
- * le passe par rapport a plot_now_ms). */
+/* Shifts plot_now_ms and all x_tick_time_ms[] by the same offset, keeping
+ * their differences (and on-screen positions) unchanged. */
 static void plot_time_rebase_if_needed(void)
 {
     if (plot_now_ms < PLOT_TIME_REBASE_THRESHOLD_MS) {
@@ -225,10 +197,9 @@ static void plot_timer_cb(lv_timer_t *timer)
     }
 }
 
-/* Le timer ne tourne que lorsque cet ecran est reellement affiche, pour
- * ne pas charger le thread LVGL en permanence pour un ecran invisible.
- * Les 4 canaux ADC restent lus en continu par leurs threads dedies
- * (adc_input.c) ; seul l'historique du chart se fige pendant la pause. */
+/* Refresh timer only runs while this screen is visible, to spare the LVGL
+ * thread. ADC sampling itself keeps running (adc_input.c); only the chart
+ * history freezes while paused. */
 static void plot_display_visibility_cb(lv_event_t *e)
 {
     if (lv_event_get_code(e) == LV_EVENT_SCREEN_LOADED) {
@@ -275,8 +246,7 @@ void plot_display_init(void)
     lv_chart_set_range(chart, LV_CHART_AXIS_PRIMARY_Y, y_range_lo, y_range_hi);
     lv_chart_set_update_mode(chart, LV_CHART_UPDATE_MODE_SHIFT);
 
-    /* Par defaut LVGL dessine un marqueur rond (LV_PART_INDICATOR, rayon
-     * cercle) a chaque echantillon. On le remplace par un tiret plat. */
+    /* Replace LVGL's default round point marker with a flat dash. */
     lv_obj_set_style_radius(chart, 0, LV_PART_INDICATOR);
     lv_obj_set_style_width(chart, 8, LV_PART_INDICATOR);
     lv_obj_set_style_height(chart, 2, LV_PART_INDICATOR);
@@ -286,10 +256,8 @@ void plot_display_init(void)
                                          LV_CHART_AXIS_PRIMARY_Y);
     }
 
-    /* Echelle Y (mV) : SCALE_DIVS_Y+1 graduations, valeur max en haut.
-     * Positions fixes ; le texte est rafraichi dynamiquement par
-     * y_labels_refresh() quand la bande active change (voir
-     * plot_y_range_update()). */
+    /* Y scale (mV): fixed positions, text refreshed by y_labels_refresh()
+     * when the active zone changes. */
     for (int i = 0; i <= SCALE_DIVS_Y; i++) {
         y_labels[i] = lv_label_create(plot_display_screen);
 
@@ -299,11 +267,8 @@ void plot_display_init(void)
     }
     y_labels_refresh();
 
-    /* Echelle X (ms) : dynamique, glisse de droite a gauche en meme temps
-     * que les echantillons (voir x_tick_update()). Compteur de temps
-     * ecoule qui demarre a 0 : les naissances initiales sont reparties
-     * dans le futur (0, +1000, ..., +PLOT_WINDOW_MS) et chaque tick reste
-     * masque tant que son instant n'est pas atteint (age_ms < 0). */
+    /* X scale (ms): slides with the chart (see x_tick_update()). Initial
+     * ticks are staggered into the future and stay hidden until reached. */
     for (int i = 0; i <= SCALE_DIVS_X; i++) {
         x_tick_labels[i] = lv_label_create(plot_display_screen);
         lv_obj_set_y(x_tick_labels[i], CHART_Y + CHART_H + 2);
@@ -319,7 +284,7 @@ void plot_display_init(void)
     lv_obj_set_style_text_align(x_axis_title, LV_TEXT_ALIGN_CENTER, 0);
     lv_obj_set_pos(x_axis_title, CHART_X, CHART_Y + CHART_H + 18);
 
-    /* Legende a droite du graphique : carre de couleur + nom du canal. */
+    /* Legend to the right of the chart: color swatch + channel name. */
     for (int i = 0; i < ADC_CHANNEL_COUNT; i++) {
         int32_t item_y = CHART_Y + 8 + i * (CHART_H / ADC_CHANNEL_COUNT);
 

@@ -1,3 +1,8 @@
+/**
+ * @file
+ * @brief Scrollable on-screen event log (timestamped, ring-buffered).
+ */
+
 #include "events_logs.h"
 #include "launcher.h"
 #include <lvgl_zephyr.h>
@@ -24,8 +29,7 @@ static size_t events_write_idx;
 static size_t events_count;
 static bool events_dirty;
 
-/* Buffer d'affichage : une ligne horodatee par entree, la plus recente en
- * bas (comme un terminal). +1 pour le '\n' entre lignes. */
+/* Rendered text: one timestamped line per entry, newest at the bottom. */
 static char console_text[EVENTS_LOG_MAX_LINES * (EVENTS_LOG_LINE_LEN + 1) + 1];
 
 void events_logs_add(const char *fmt, ...)
@@ -60,16 +64,14 @@ static void console_timer_cb(lv_timer_t *timer)
     bool was_at_bottom;
     size_t start, off = 0;
 
-    /* Evite de reconstruire console_text et de re-set le label (donc un
-     * re-layout LVGL) a chaque tick (500 ms) quand rien de nouveau n'est
-     * arrive depuis le dernier rafraichissement. */
+    /* Skip rebuilding console_text (and the LVGL re-layout it triggers)
+     * when nothing changed since the last tick. */
     if (!events_dirty) {
         return;
     }
     events_dirty = false;
 
-    /* Ne recolle en bas que si l'utilisateur n'a pas scrolle vers le haut :
-     * sinon chaque tick lui arrachait le geste tactile des mains. */
+    /* Only re-stick to the bottom if the user hasn't scrolled up. */
     was_at_bottom = lv_obj_get_scroll_bottom(console_container) <= 4;
     start = (events_count < EVENTS_LOG_MAX_LINES) ? 0 : events_write_idx;
 
@@ -94,10 +96,9 @@ static void console_timer_cb(lv_timer_t *timer)
     }
 }
 
-/* Le timer ne tourne que lorsque cet ecran est reellement affiche, pour
- * ne pas charger le thread LVGL en permanence pour un ecran invisible.
- * events_logs_add() continue d'ecrire dans le ring buffer independamment
- * de l'etat du timer : aucune entree n'est perdue pendant la pause. */
+/* Refresh timer only runs while this screen is visible, to spare the LVGL
+ * thread. events_logs_add() keeps writing to the ring buffer regardless,
+ * so no entry is lost while paused. */
 static void events_logs_visibility_cb(lv_event_t *e)
 {
     if (lv_event_get_code(e) == LV_EVENT_SCREEN_LOADED) {

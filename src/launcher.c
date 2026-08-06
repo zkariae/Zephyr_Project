@@ -1,3 +1,8 @@
+/**
+ * @file
+ * @brief Home screen: grid of tiles to open each app screen.
+ */
+
 #include "launcher.h"
 #include "system_overview.h"
 #include "rtos_tasks.h"
@@ -57,8 +62,8 @@ static void open_plot_display(lv_event_t *e)
     lv_screen_load(plot_display_screen_get());
 }
 
-/* Cree une tuile bouton pleine case (160x136), fond colore, texte blanc
- * aligne en haut a gauche, sans coins arrondis ni bordure. */
+/* Full-tile (160x136) button: solid color, white top-left text, no
+ * rounded corners or border. */
 static lv_obj_t *create_tile_button(lv_obj_t *parent, int x, int y, lv_color_t color,
                                      const char *text, lv_event_cb_t cb)
 {
@@ -84,10 +89,8 @@ static lv_obj_t *create_tile_button(lv_obj_t *parent, int x, int y, lv_color_t c
     return btn;
 }
 
-/* Rafraichit les 3 labels de la tuile statut a partir du dernier statut de
- * liaison recu par UART (voir async_printk_get_link_status). N'ecrit un
- * label que si son texte a change, pour eviter des invalidations LVGL
- * inutiles a chaque tick. */
+/* Only writes a label when its text actually changed, to avoid needless
+ * LVGL invalidations each tick. */
 static void status_tile_timer_cb(lv_timer_t *timer)
 {
     (void)timer;
@@ -114,8 +117,8 @@ static void status_tile_timer_cb(lv_timer_t *timer)
     }
 }
 
-/* Tuile haut-gauche : statut/horloge/date recus en direct via UART depuis
- * tools/send_time.py (pas de RTC dans le projet, le PC fait autorite). */
+/* Top-left tile: status/clock/date received live over UART from
+ * tools/send_time.py (no RTC on the board, the PC is the time source). */
 static void create_status_tile(lv_obj_t *parent, int x, int y)
 {
     lv_obj_t *tile = lv_obj_create(parent);
@@ -161,14 +164,14 @@ void launcher_init(void)
     lv_obj_set_style_border_width(launcher_screen, 0, 0);
     lv_obj_clear_flag(launcher_screen, LV_OBJ_FLAG_SCROLLABLE);
 
-    /* Ligne 1 */
+    /* Row 1 */
     create_status_tile(launcher_screen, 0, 0);
     create_tile_button(launcher_screen, TILE_W, 0, lv_color_hex(0xB71C1C),
                         "SYSTEM\nOVERVIEW", open_system_overview);
     create_tile_button(launcher_screen, 2 * TILE_W, 0, lv_color_hex(0x8E2C8F),
                         "RTOS\nTASKS", open_rtos_info);
 
-    /* Ligne 2 */
+    /* Row 2 */
     create_tile_button(launcher_screen, 0, TILE_H, lv_color_hex(0x00A651),
                         "PLOT\nDISPLAY", open_plot_display);
     create_tile_button(launcher_screen, TILE_W, TILE_H, lv_color_hex(0xFFC107),
