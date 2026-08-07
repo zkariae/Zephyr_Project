@@ -13,6 +13,7 @@
 /* &iwdg is defined (disabled) in stm32f7.dtsi, enabled in our board overlay. */
 static const struct device *const iwdg_dev = DEVICE_DT_GET(DT_NODELABEL(iwdg));
 static int wdt_channel_id;
+static int64_t last_feed_uptime;
 
 /* 8s: comfortable margin above main.c's 1s feed period, also covers boot. */
 #define WATCHDOG_TIMEOUT_MS 8000
@@ -45,12 +46,26 @@ int watchdog_init(void)
     }
 
     printk("[watchdog]: IWDG arme (timeout %dms)\n", WATCHDOG_TIMEOUT_MS);
+    last_feed_uptime = k_uptime_get();
     return 0;
 }
 
 void watchdog_feed(void)
 {
+    last_feed_uptime = k_uptime_get();
     wdt_feed(iwdg_dev, wdt_channel_id);
+}
+
+/* Software mirror of the IWDG's internal countdown: not readable from the
+ * hardware, so we track it from the last feed timestamp instead. */
+uint32_t watchdog_get_remaining_ms(void)
+{
+    int64_t elapsed = k_uptime_get() - last_feed_uptime;
+
+    if (elapsed >= WATCHDOG_TIMEOUT_MS) {
+        return 0;
+    }
+    return (uint32_t)(WATCHDOG_TIMEOUT_MS - elapsed);
 }
 
 /* Distinguishes a watchdog/software reset (crash) from a normal boot. */

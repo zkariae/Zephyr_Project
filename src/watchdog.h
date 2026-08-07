@@ -6,6 +6,8 @@
 #ifndef WATCHDOG_H_
 #define WATCHDOG_H_
 
+#include <stdint.h>
+
 /**
  * @brief Set up and arm the IWDG watchdog.
  *
@@ -18,5 +20,8 @@ void watchdog_feed(void);
 
 /** @brief Log the cause of the last reset (watchdog, software fault, or normal boot). */
 void watchdog_report_reset_cause(void);
+
+/** @brief Time remaining (ms) before an IWDG reset if not fed again. */
+uint32_t watchdog_get_remaining_ms(void);
 
 #endif /* WATCHDOG_H_ */
