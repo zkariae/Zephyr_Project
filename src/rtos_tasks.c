@@ -2,6 +2,11 @@
  * @file
  * @brief RTOS thread monitor: table of live threads, state, priority, and
  *        free stack.
+ *
+ * DISABLED: not built (see CMakeLists.txt). Replaced by the Task
+ * Management screen (src/task_management.c + src/pc_profiler.c), which
+ * shows per-function CPU usage instead of per-thread state. Kept on disk
+ * for reference / possible reuse, not deleted.
  */
 
 #include "rtos_tasks.h"
