@@ -5,7 +5,7 @@
 
 #include "launcher.h"
 #include "system_overview.h"
-#include "rtos_tasks.h"
+#include "task_management.h"
 #include "events_logs.h"
 #include "live_variables.h"
 #include "plot_display.h"
@@ -30,12 +30,12 @@ static void open_system_overview(lv_event_t *e)
     lv_screen_load(system_overview_screen_get());
 }
 
-static void open_rtos_info(lv_event_t *e)
+static void open_task_management(lv_event_t *e)
 {
     (void)e;
-    printk("[launcher]: Opening RTOS info\n");
-    events_logs_add("[launcher] Ouverture RTOS Tasks");
-    lv_screen_load(rtos_tasks_screen_get());
+    printk("[launcher]: Opening task management\n");
+    events_logs_add("[launcher] Ouverture Task Management");
+    lv_screen_load(task_management_screen_get());
 }
 
 static void open_event_info(lv_event_t *e)
@@ -169,7 +169,7 @@ void launcher_init(void)
     create_tile_button(launcher_screen, TILE_W, 0, lv_color_hex(0xB71C1C),
                         "SYSTEM\nOVERVIEW", open_system_overview);
     create_tile_button(launcher_screen, 2 * TILE_W, 0, lv_color_hex(0x8E2C8F),
-                        "RTOS\nTASKS", open_rtos_info);
+                        "TASK\nMANAGEMENT", open_task_management);
 
     /* Row 2 */
     create_tile_button(launcher_screen, 0, TILE_H, lv_color_hex(0x00A651),

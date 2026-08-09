@@ -11,7 +11,8 @@
 #include <zephyr/sys/printk.h>
 
 #include "system_overview.h"
-#include "rtos_tasks.h"
+#include "task_management.h"
+#include "pc_profiler.h"
 #include "events_logs.h"
 #include "live_variables.h"
 #include "launcher.h"
@@ -63,8 +64,11 @@ int main(void)
     system_overview_init();
     printk("[main]: system_overview_init OK\n");
 
-    rtos_tasks_init();
-    printk("[main]: rtos_tasks_init OK\n");
+    pc_profiler_init();
+    printk("[main]: pc_profiler_init OK\n");
+
+    task_management_init();
+    printk("[main]: task_management_init OK\n");
 
     events_logs_init();
     printk("[main]: events_logs_init OK\n");
