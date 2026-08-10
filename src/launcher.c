@@ -169,7 +169,7 @@ void launcher_init(void)
     create_tile_button(launcher_screen, TILE_W, 0, lv_color_hex(0xB71C1C),
                         "SYSTEM\nOVERVIEW", open_system_overview);
     create_tile_button(launcher_screen, 2 * TILE_W, 0, lv_color_hex(0x8E2C8F),
-                        "TASK\nMANAGEMENT", open_task_management);
+                        "CPU\nPROFILER", open_task_management);
 
     /* Row 2 */
     create_tile_button(launcher_screen, 0, TILE_H, lv_color_hex(0x00A651),
