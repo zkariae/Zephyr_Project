@@ -138,6 +138,9 @@ void task_management_init(void)
     lv_label_set_text(back_label, "Menu");
     lv_obj_center(back_label);
 
+    
+    lv_obj_clear_flag(task_management_screen, LV_OBJ_FLAG_SCROLL_ELASTIC); 
+
     profiler_table = lv_table_create(task_management_screen);
     lv_table_set_column_count(profiler_table, 5);
     /* Columns span the full screen width (480px). */
@@ -155,11 +158,11 @@ void task_management_init(void)
     lv_obj_align(profiler_table, LV_ALIGN_TOP_LEFT, 0, 60);
     lv_obj_clear_flag(profiler_table, LV_OBJ_FLAG_SCROLL_ELASTIC);
 
-    lv_table_set_cell_value(profiler_table, 0, 0, "Fonction");
+    lv_table_set_cell_value(profiler_table, 0, 0, "Function");
     lv_table_set_cell_value(profiler_table, 0, 1, "% CPU");
-    lv_table_set_cell_value(profiler_table, 0, 2, "Echantillons");
-    lv_table_set_cell_value(profiler_table, 0, 3, "Adresse");
-    lv_table_set_cell_value(profiler_table, 0, 4, "Taille");
+    lv_table_set_cell_value(profiler_table, 0, 2, "Samples");
+    lv_table_set_cell_value(profiler_table, 0, 3, "Address");
+    lv_table_set_cell_value(profiler_table, 0, 4, "Size");
 
     profiler_timer = lv_timer_create(profiler_timer_cb, TASK_MGMT_REFRESH_PERIOD_MS, NULL);
     lv_timer_pause(profiler_timer);
