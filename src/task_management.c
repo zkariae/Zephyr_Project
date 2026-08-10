@@ -26,7 +26,7 @@ static void back_to_menu_cb(lv_event_t *e)
 {
     (void)e;
     printk("[task_management]: Back to menu\n");
-    events_logs_add("[task_management] Retour menu");
+    events_logs_add("[task_management] Back to menu");
     lv_screen_load(launcher_screen_get());
 }
 

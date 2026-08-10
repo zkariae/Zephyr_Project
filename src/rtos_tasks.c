@@ -37,7 +37,7 @@ static void back_to_menu_cb(lv_event_t *e)
 {
     (void)e;
     printk("[rtos_tasks]: Back to menu\n");
-    events_logs_add("[rtos_tasks] Retour menu");
+    events_logs_add("[rtos_tasks] Back to menu");
     lv_screen_load(launcher_screen_get());
 }
 

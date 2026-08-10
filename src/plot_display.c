@@ -155,7 +155,7 @@ static void back_to_menu_cb(lv_event_t *e)
 {
     (void)e;
     printk("[plot_display]: Back to menu\n");
-    events_logs_add("[plot_display] Retour menu");
+    events_logs_add("[plot_display] Back to menu");
     lv_screen_load(launcher_screen_get());
 }
 

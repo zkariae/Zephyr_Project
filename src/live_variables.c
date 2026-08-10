@@ -25,7 +25,7 @@ static void back_to_menu_cb(lv_event_t *e)
 {
     (void)e;
     printk("[live_variables]: Back to menu\n");
-    events_logs_add("[live_variables] Retour menu");
+    events_logs_add("[live_variables] Back to menu");
     lv_screen_load(launcher_screen_get());
 }
 

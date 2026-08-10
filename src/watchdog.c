@@ -78,11 +78,11 @@ void watchdog_report_reset_cause(void)
     hwinfo_clear_reset_cause();
 
     if (cause & RESET_WATCHDOG) {
-        msg = "[boot] Reset watchdog (IWDG) - plantage probable au cycle precedent";
+        msg = "[boot] Watchdog reset (IWDG) - likely crash on the previous cycle";
     } else if (cause & RESET_SOFTWARE) {
-        msg = "[boot] Reset logiciel - probable fault CPU (CONFIG_RESET_ON_FATAL_ERROR)";
+        msg = "[boot] Software reset - likely CPU fault (CONFIG_RESET_ON_FATAL_ERROR)";
     } else {
-        msg = "[boot] Demarrage normal (reset pin/POR/brownout)";
+        msg = "[boot] Normal boot (reset pin/POR/brownout)";
     }
 
     printk("%s\n", msg);
