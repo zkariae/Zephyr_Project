@@ -9,6 +9,7 @@
 #include <zephyr/device.h>
 #include <zephyr/drivers/display.h>
 #include <zephyr/sys/printk.h>
+#include <lvgl_mem.h>
 
 #include "system_overview.h"
 #include "task_management.h"
@@ -34,19 +35,19 @@ int main(void)
     watchdog_report_reset_cause();
 
     printk("[main]: Projet1 demarre, verification de l'ecran...\n");
-    events_logs_add("[main] Projet1 demarre");
+    events_logs_add("[main] Projet1 starting");
 
     if (!device_is_ready(display_dev)) {
         printk("[main]: Ecran non pret\n");
-        events_logs_add("[main] Ecran non pret");
+        events_logs_add("[main] Display not ready");
         return -1;
     }
     printk("[main]: Ecran pret\n");
-    events_logs_add("[main] Ecran pret");
+    events_logs_add("[main] Display ready");
 
     if (watchdog_init() != 0) {
         printk("[main]: watchdog_init ECHEC (pas de filet de securite IWDG)\n");
-        events_logs_add("[main] watchdog_init ECHEC");
+        events_logs_add("[main] watchdog_init FAILED");
     }
 
     splash_show_image1();
@@ -75,14 +76,14 @@ int main(void)
         
     if (adc_input_init() != 0) {
         printk("[main]: adc_input_init ECHEC\n");
-        events_logs_add("[main] adc_input_init ECHEC");
+        events_logs_add("[main] adc_input_init FAILED");
     } else {
         printk("[main]: adc_input_init OK\n");
     }
 
     if (temperature_init() != 0) {
         printk("[main]: temperature_init ECHEC\n");
-        events_logs_add("[main] temperature_init ECHEC");
+        events_logs_add("[main] temperature_init FAILED");
     } else {
         printk("[main]: temperature_init OK\n");
     }
@@ -95,14 +96,23 @@ int main(void)
 
     launcher_init(); /* Builds and loads the launcher screen (lv_screen_load). */
     printk("[main]: launcher_init OK, ecran charge\n");
-    events_logs_add("[main] Boot termine, launcher affiche");
+    events_logs_add("[main] Boot complete, launcher displayed");
 
-
-
+    int uptime_s = 0;
 
     while (1) {
         k_sleep(K_SECONDS(1));
         watchdog_feed();
+
+        uptime_s++;
+        if (uptime_s % 5 == 0) {
+            struct sys_memory_stats stats;
+
+            lvgl_heap_stats(&stats);
+            events_logs_add("[mem] free=%u allocated=%u max_allocated=%u",
+                             (unsigned)stats.free_bytes, (unsigned)stats.allocated_bytes,
+                             (unsigned)stats.max_allocated_bytes);
+        }
     }
 
     return 0;
