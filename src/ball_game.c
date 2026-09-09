@@ -55,6 +55,22 @@ static void back_to_menu_cb(lv_event_t *e)
     lv_screen_load(launcher_screen_get());
 }
 
+/* Recalibrates the MPU6050's zero-offset in whatever orientation it's
+ * held in right now - lets "neutral" be redefined on demand instead of
+ * only at boot. mpu6050_input_calibrate() just signals a background
+ * thread, so this doesn't block the LVGL/touch context. */
+static void calibrate_cb(lv_event_t *e)
+{
+    (void)e;
+    printk("[ball_game]: Recalibrating MPU6050 zero-offset\n");
+    events_logs_add("[ball_game] Recalibrating MPU6050");
+    mpu6050_input_calibrate();
+    ball_x = SCREEN_W / 2.0f;
+    ball_y = SCREEN_H / 2.0f;
+    ball_vx = 0.0f;
+    ball_vy = 0.0f;
+}
+
 static void physics_timer_cb(lv_timer_t *timer)
 {
     (void)timer;
@@ -141,6 +157,15 @@ void ball_game_init(void)
     lv_obj_t *back_label = lv_label_create(back_btn);
     lv_label_set_text(back_label, "Menu");
     lv_obj_center(back_label);
+
+    lv_obj_t *calib_btn = lv_button_create(ball_game_screen);
+    lv_obj_set_size(calib_btn, 80, 30);
+    lv_obj_align(calib_btn, LV_ALIGN_TOP_LEFT, 10, 50);
+    lv_obj_add_event_cb(calib_btn, calibrate_cb, LV_EVENT_CLICKED, NULL);
+
+    lv_obj_t *calib_label = lv_label_create(calib_btn);
+    lv_label_set_text(calib_label, "Calib");
+    lv_obj_center(calib_label);
 
     ball = lv_obj_create(ball_game_screen);
     lv_obj_set_size(ball, BALL_RADIUS * 2, BALL_RADIUS * 2);
