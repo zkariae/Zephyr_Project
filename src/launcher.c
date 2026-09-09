@@ -8,6 +8,7 @@
 #include "task_management.h"
 #include "events_logs.h"
 #include "live_variables.h"
+#include "ball_game.h"
 #include "async_printk.h"
 #include <lvgl_zephyr.h>
 #include <string.h>
@@ -51,6 +52,14 @@ static void open_live_variables(lv_event_t *e)
     printk("[launcher]: Opening live variables\n");
     events_logs_add("[launcher] Opening Live Variables");
     lv_screen_load(live_variables_screen_get());
+}
+
+static void open_ball_game(lv_event_t *e)
+{
+    (void)e;
+    printk("[launcher]: Opening ball game\n");
+    events_logs_add("[launcher] Opening Ball Game");
+    lv_screen_load(ball_game_screen_get());
 }
 
 /* Full-tile (160x136) button: solid color, white top-left text, no
@@ -167,6 +176,8 @@ void launcher_init(void)
                         "EVENT\nLOGS", open_event_info);
     create_tile_button(launcher_screen, TILE_W, TILE_H, lv_color_hex(0x1B5E73),
                         "LIVE\nVARIABLES", open_live_variables);
+    create_tile_button(launcher_screen, 2 * TILE_W, TILE_H, lv_color_hex(0x00A651),
+                        "BALL\nGAME", open_ball_game);
 
     lv_screen_load(launcher_screen);
 

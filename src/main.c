@@ -16,6 +16,7 @@
 #include "pc_profiler.h"
 #include "events_logs.h"
 #include "live_variables.h"
+#include "ball_game.h"
 #include "launcher.h"
 #include "splash.h"
 #include "temperature.h"
@@ -89,6 +90,9 @@ int main(void)
 
     live_variables_init();
     printk("[main]: live_variables_init OK\n");
+
+    ball_game_init();
+    printk("[main]: ball_game_init OK\n");
 
     launcher_init(); /* Builds and loads the launcher screen (lv_screen_load). */
     printk("[main]: launcher_init OK, ecran charge\n");

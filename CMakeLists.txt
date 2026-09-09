@@ -17,6 +17,7 @@ target_sources(app PRIVATE
     src/generated/symtab_data.c
     src/events_logs.c
     src/live_variables.c
+    src/ball_game.c
     src/launcher.c
     src/splash.c
     src/images/img_image1.c
