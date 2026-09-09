@@ -22,10 +22,21 @@
 #define DAMPING 0.98f
 #define RESTITUTION 0.7f
 
+/* Stronger friction applied per-axis once its tilt input drops into
+ * the deadzone, so residual velocity from the last active tilt bleeds
+ * off in well under a second instead of coasting for several seconds
+ * on DAMPING alone. */
+#define RELEASE_DAMPING 0.80f
+
 /* Flip to -1 if a tilt moves the ball the wrong way - depends on how
  * the MPU6050 is physically mounted relative to the screen. */
 #define ACCEL_X_SIGN 1
 #define ACCEL_Y_SIGN 1
+
+/* Ignore residual noise left after mpu6050_input.c's boot calibration,
+ * so the ball fully settles instead of creeping. */
+#define ACCEL_DEADZONE_MMS2 80.0f
+#define VELOCITY_EPSILON_PXS 2.0f
 
 static lv_obj_t *ball_game_screen;
 static lv_obj_t *ball;
@@ -49,11 +60,28 @@ static void physics_timer_cb(lv_timer_t *timer)
     (void)timer;
     const float dt = PHYSICS_PERIOD_MS / 1000.0f;
 
-    float ax = ACCEL_X_SIGN * mpu6050_input_get_accel_x_mms2() * ACCEL_TO_PX;
-    float ay = ACCEL_Y_SIGN * mpu6050_input_get_accel_y_mms2() * ACCEL_TO_PX;
+    int32_t raw_ax = mpu6050_input_get_accel_x_mms2();
+    int32_t raw_ay = mpu6050_input_get_accel_y_mms2();
 
-    ball_vx = (ball_vx + ax * dt) * DAMPING;
-    ball_vy = (ball_vy + ay * dt) * DAMPING;
+    if (raw_ax > -ACCEL_DEADZONE_MMS2 && raw_ax < ACCEL_DEADZONE_MMS2) {
+        raw_ax = 0;
+    }
+    if (raw_ay > -ACCEL_DEADZONE_MMS2 && raw_ay < ACCEL_DEADZONE_MMS2) {
+        raw_ay = 0;
+    }
+
+    float ax = ACCEL_X_SIGN * raw_ax * ACCEL_TO_PX;
+    float ay = ACCEL_Y_SIGN * raw_ay * ACCEL_TO_PX;
+
+    ball_vx = (ball_vx + ax * dt) * (ax == 0.0f ? RELEASE_DAMPING : DAMPING);
+    ball_vy = (ball_vy + ay * dt) * (ay == 0.0f ? RELEASE_DAMPING : DAMPING);
+
+    if (ax == 0.0f && ball_vx > -VELOCITY_EPSILON_PXS && ball_vx < VELOCITY_EPSILON_PXS) {
+        ball_vx = 0.0f;
+    }
+    if (ay == 0.0f && ball_vy > -VELOCITY_EPSILON_PXS && ball_vy < VELOCITY_EPSILON_PXS) {
+        ball_vy = 0.0f;
+    }
 
     ball_x += ball_vx * dt;
     ball_y += ball_vy * dt;
