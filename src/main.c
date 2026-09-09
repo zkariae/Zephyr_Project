@@ -18,9 +18,7 @@
 #include "live_variables.h"
 #include "launcher.h"
 #include "splash.h"
-#include "adc_input.h"
 #include "temperature.h"
-#include "plot_display.h"
 #include "async_printk.h"
 #include "watchdog.h"
 
@@ -74,13 +72,6 @@ int main(void)
     events_logs_init();
     printk("[main]: events_logs_init OK\n");
         
-    if (adc_input_init() != 0) {
-        printk("[main]: adc_input_init ECHEC\n");
-        events_logs_add("[main] adc_input_init FAILED");
-    } else {
-        printk("[main]: adc_input_init OK\n");
-    }
-
     if (temperature_init() != 0) {
         printk("[main]: temperature_init ECHEC\n");
         events_logs_add("[main] temperature_init FAILED");
@@ -90,9 +81,6 @@ int main(void)
 
     live_variables_init();
     printk("[main]: live_variables_init OK\n");
-
-    plot_display_init();
-    printk("[main]: plot_display_init OK\n");
 
     launcher_init(); /* Builds and loads the launcher screen (lv_screen_load). */
     printk("[main]: launcher_init OK, ecran charge\n");

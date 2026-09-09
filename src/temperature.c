@@ -9,15 +9,13 @@
 #include <zephyr/drivers/sensor.h>
 
 /* die_temp/vref nodes are defined in stm32f7.dtsi, enabled in our board
- * overlay. Unlike adc_input.c, the driver handles the ADC channel and
- * factory calibration itself. */
+ * overlay. The driver handles the ADC channel and factory calibration
+ * itself. */
 static const struct device *const die_temp_dev = DEVICE_DT_GET(DT_NODELABEL(die_temp));
 static const struct device *const vref_dev = DEVICE_DT_GET(DT_NODELABEL(vref));
 
 #define TEMPERATURE_THREAD_STACK_SIZE 1024
 
-/* Same priority as ADC_THREAD_PRIORITY (adc_input.c): die_temp/vref share
- * ADC1 with the pot0 thread, serialized without priority inheritance. */
 #define TEMPERATURE_THREAD_PRIORITY 5
 #define TEMPERATURE_SAMPLE_PERIOD_MS 1000
 

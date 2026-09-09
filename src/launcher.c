@@ -8,7 +8,6 @@
 #include "task_management.h"
 #include "events_logs.h"
 #include "live_variables.h"
-#include "plot_display.h"
 #include "async_printk.h"
 #include <lvgl_zephyr.h>
 #include <string.h>
@@ -52,14 +51,6 @@ static void open_live_variables(lv_event_t *e)
     printk("[launcher]: Opening live variables\n");
     events_logs_add("[launcher] Opening Live Variables");
     lv_screen_load(live_variables_screen_get());
-}
-
-static void open_plot_display(lv_event_t *e)
-{
-    (void)e;
-    printk("[launcher]: Opening plot display\n");
-    events_logs_add("[launcher] Opening Plot Display");
-    lv_screen_load(plot_display_screen_get());
 }
 
 /* Full-tile (160x136) button: solid color, white top-left text, no
@@ -172,11 +163,9 @@ void launcher_init(void)
                         "CPU\nPROFILER", open_task_management);
 
     /* Row 2 */
-    create_tile_button(launcher_screen, 0, TILE_H, lv_color_hex(0x00A651),
-                        "PLOT\nDISPLAY", open_plot_display);
-    create_tile_button(launcher_screen, TILE_W, TILE_H, lv_color_hex(0xFFC107),
+    create_tile_button(launcher_screen, 0, TILE_H, lv_color_hex(0xFFC107),
                         "EVENT\nLOGS", open_event_info);
-    create_tile_button(launcher_screen, 2 * TILE_W, TILE_H, lv_color_hex(0x1B5E73),
+    create_tile_button(launcher_screen, TILE_W, TILE_H, lv_color_hex(0x1B5E73),
                         "LIVE\nVARIABLES", open_live_variables);
 
     lv_screen_load(launcher_screen);

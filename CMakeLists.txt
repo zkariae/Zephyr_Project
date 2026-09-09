@@ -17,12 +17,10 @@ target_sources(app PRIVATE
     src/generated/symtab_data.c
     src/events_logs.c
     src/live_variables.c
-    src/plot_display.c
     src/launcher.c
     src/splash.c
     src/images/img_image1.c
     src/images/img_image2.c
-    src/adc_input.c
     src/temperature.c
     src/async_printk.c
     src/watchdog.c

@@ -23,90 +23,13 @@
 };
 
 /*
- * ADC1 channel 0 (ADC1_IN0) on PA0, using the standard pinctrl node from
- * stm32f750n8hx-pinctrl.dtsi. io-channels below exposes it to the app via
- * adc_dt_spec on the zephyr,user node.
+ * ADC1 itself is disabled by default in stm32f7.dtsi; die_temp/vref
+ * below reference its internal channels (17/18) directly and need it
+ * enabled, with no pinctrl or DMA required.
  */
 &adc1 {
-	pinctrl-0 = <&adc1_in0_pa0>;
-	pinctrl-names = "default";
-	/* st,adc-clock-source = "SYNC" is already the stm32f7.dtsi default */
 	st,adc-prescaler = <4>;
 	status = "okay";
-
-	/*
-	 * DMA2 Stream0/Channel0, confirmed via STM32CubeMX (RM0385 alone
-	 * doesn't disambiguate this pairing among the valid ADC1/ADC3
-	 * options on DMA2).
-	 */
-	dmas = <&dma2 0 0 (STM32_DMA_PERIPH_RX | STM32_DMA_MEM_16BITS |
-			   STM32_DMA_PERIPH_16BITS) STM32_DMA_FIFO_FULL>;
-	dma-names = "dma";
-
-	#address-cells = <1>;
-	#size-cells = <0>;
-
-	channel@0 {
-		reg = <0>;
-		zephyr,gain = "ADC_GAIN_1";
-		zephyr,reference = "ADC_REF_INTERNAL";
-		zephyr,acquisition-time = <ADC_ACQ_TIME_DEFAULT>;
-		zephyr,resolution = <12>;
-	};
-};
-
-
-&adc3 {
-	pinctrl-0 = <&adc3_in8_pf10> , <&adc3_in7_pf9> , <&adc3_in6_pf8>;
-	pinctrl-names = "default";
-	st,adc-prescaler = <4>;
-	status = "okay";
-
-	/*
-	 * DMA2 Stream1/Channel2 - distinct from ADC1's Stream0 since both
-	 * run in parallel and can't share a hardware stream. Confirmed via
-	 * STM32CubeMX.
-	 */
-	dmas = <&dma2 1 2 (STM32_DMA_PERIPH_RX | STM32_DMA_MEM_16BITS |
-			   STM32_DMA_PERIPH_16BITS) STM32_DMA_FIFO_FULL>;
-	dma-names = "dma";
-
-	#address-cells = <1>;
-	#size-cells = <0>;
-
-	channel@8 {
-		reg = <8>;
-		zephyr,gain = "ADC_GAIN_1";
-		zephyr,reference = "ADC_REF_INTERNAL";
-		zephyr,acquisition-time = <ADC_ACQ_TIME_DEFAULT>;
-		zephyr,resolution = <12>;
-	};
-	channel@7 {
-		reg = <7>;
-		zephyr,gain = "ADC_GAIN_1";
-		zephyr,reference = "ADC_REF_INTERNAL";
-		zephyr,acquisition-time = <ADC_ACQ_TIME_DEFAULT>;
-		zephyr,resolution = <12>;
-	};
-	channel@6 {
-		reg = <6>;
-		zephyr,gain = "ADC_GAIN_1";
-		zephyr,reference = "ADC_REF_INTERNAL";
-		zephyr,acquisition-time = <ADC_ACQ_TIME_DEFAULT>;
-		zephyr,resolution = <12>;
-	};
-};
-
-&dma2 {
-	status = "okay";
-};
-
-
-/ {
-	zephyr,user {
-		io-channels = <&adc1 0>, <&adc3 8>, <&adc3 7>, <&adc3 6>;
-		io-channel-names = "pot0", "pot1", "pot2", "pot3";
-	};
 };
 
 /*
