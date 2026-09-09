@@ -19,6 +19,7 @@
 #include "launcher.h"
 #include "splash.h"
 #include "temperature.h"
+#include "mpu6050_input.h"
 #include "async_printk.h"
 #include "watchdog.h"
 
@@ -77,6 +78,13 @@ int main(void)
         events_logs_add("[main] temperature_init FAILED");
     } else {
         printk("[main]: temperature_init OK\n");
+    }
+
+    if (mpu6050_input_init() != 0) {
+        printk("[main]: mpu6050_input_init ECHEC\n");
+        events_logs_add("[main] mpu6050_input_init FAILED");
+    } else {
+        printk("[main]: mpu6050_input_init OK\n");
     }
 
     live_variables_init();

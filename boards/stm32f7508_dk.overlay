@@ -51,6 +51,18 @@
 };
 
 /*
+ * MPU6050 accel/gyro on I2C1 (PB8/PB9, exposed on the Arduino R3
+ * connector as D15/D14) - i2c1 is already enabled by default in
+ * stm32f7508_dk.dts. AD0 wired to GND -> address 0x68.
+ */
+&i2c1 {
+	mpu6050: mpu6050@68 {
+		compatible = "invensense,mpu6050";
+		reg = <0x68>;
+	};
+};
+
+/*
  * Hardware IWDG watchdog: ready-made stm32f7.dtsi node, just disabled
  * by default. Runs off its own LSI timer, independent of the core -
  * resets the board if it stops being fed. Configured and fed from

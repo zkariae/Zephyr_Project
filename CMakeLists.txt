@@ -22,6 +22,7 @@ target_sources(app PRIVATE
     src/images/img_image1.c
     src/images/img_image2.c
     src/temperature.c
+    src/mpu6050_input.c
     src/async_printk.c
     src/watchdog.c
 )
