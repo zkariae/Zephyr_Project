@@ -146,7 +146,7 @@ void ball_game_init(void)
     lvgl_lock();
 
     ball_game_screen = lv_obj_create(NULL);
-    lv_obj_set_style_bg_color(ball_game_screen, lv_color_black(), 0);
+    lv_obj_set_style_bg_color(ball_game_screen, lv_color_white(), 0);
     lv_obj_clear_flag(ball_game_screen, LV_OBJ_FLAG_SCROLLABLE);
 
     lv_obj_t *back_btn = lv_button_create(ball_game_screen);
