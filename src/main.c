@@ -34,8 +34,8 @@ int main(void)
 
     watchdog_report_reset_cause();
 
-    printk("[main]: Projet1 demarre, verification de l'ecran...\n");
-    events_logs_add("[main] Projet1 starting");
+    printk("[main]: stm32f7_dashboard demarre, verification de l'ecran...\n");
+    events_logs_add("[main] stm32f7_dashboard starting");
 
     if (!device_is_ready(display_dev)) {
         printk("[main]: Ecran non pret\n");
