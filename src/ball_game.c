@@ -38,9 +38,25 @@
 #define ACCEL_DEADZONE_MMS2 80.0f
 #define VELOCITY_EPSILON_PXS 2.0f
 
+/* Trail left behind while the ball is actually moving: a fixed pool of
+ * dash marks reused as a ring buffer, so it stays bounded instead of
+ * growing the LVGL heap forever. Plain solid-color rectangles rather
+ * than text labels - font glyph rendering (anti-aliased) is far more
+ * expensive to redraw than a flat fill, and cost adds up once dozens
+ * of marks sit under the ball's repeatedly-invalidated redraw area. */
+#define TRACE_MAX_COUNT 150
+#define TRACE_MARK_PERIOD_TICKS 3
+#define TRACE_MIN_SPEED_PXS 3.0f
+#define TRACE_MARK_W 6
+#define TRACE_MARK_H 2
+
 static lv_obj_t *ball_game_screen;
 static lv_obj_t *ball;
 static lv_timer_t *physics_timer;
+
+static lv_obj_t *trace_marks[TRACE_MAX_COUNT];
+static int trace_write_index;
+static int trace_tick_counter;
 
 static float ball_x = SCREEN_W / 2.0f;
 static float ball_y = SCREEN_H / 2.0f;
@@ -69,6 +85,17 @@ static void calibrate_cb(lv_event_t *e)
     ball_y = SCREEN_H / 2.0f;
     ball_vx = 0.0f;
     ball_vy = 0.0f;
+}
+
+static void clear_trace_cb(lv_event_t *e)
+{
+    (void)e;
+    for (int i = 0; i < TRACE_MAX_COUNT; i++) {
+        lv_obj_add_flag(trace_marks[i], LV_OBJ_FLAG_HIDDEN);
+    }
+    trace_write_index = 0;
+    printk("[ball_game]: Trace cleared\n");
+    events_logs_add("[ball_game] Trace cleared");
 }
 
 static void physics_timer_cb(lv_timer_t *timer)
@@ -119,6 +146,17 @@ static void physics_timer_cb(lv_timer_t *timer)
     }
 
     lv_obj_set_pos(ball, (int32_t)(ball_x - BALL_RADIUS), (int32_t)(ball_y - BALL_RADIUS));
+
+    float speed_sq = ball_vx * ball_vx + ball_vy * ball_vy;
+    if (speed_sq > TRACE_MIN_SPEED_PXS * TRACE_MIN_SPEED_PXS &&
+        ++trace_tick_counter >= TRACE_MARK_PERIOD_TICKS) {
+        trace_tick_counter = 0;
+
+        lv_obj_t *mark = trace_marks[trace_write_index];
+        lv_obj_set_pos(mark, (int32_t)ball_x - TRACE_MARK_W / 2, (int32_t)ball_y - TRACE_MARK_H / 2);
+        lv_obj_clear_flag(mark, LV_OBJ_FLAG_HIDDEN);
+        trace_write_index = (trace_write_index + 1) % TRACE_MAX_COUNT;
+    }
 }
 
 /* Physics timer only runs while this screen is visible, to spare the
@@ -166,6 +204,28 @@ void ball_game_init(void)
     lv_obj_t *calib_label = lv_label_create(calib_btn);
     lv_label_set_text(calib_label, "Calib");
     lv_obj_center(calib_label);
+
+    lv_obj_t *clear_btn = lv_button_create(ball_game_screen);
+    lv_obj_set_size(clear_btn, 80, 30);
+    lv_obj_align(clear_btn, LV_ALIGN_TOP_LEFT, 10, 90);
+    lv_obj_add_event_cb(clear_btn, clear_trace_cb, LV_EVENT_CLICKED, NULL);
+
+    lv_obj_t *clear_label = lv_label_create(clear_btn);
+    lv_label_set_text(clear_label, "Clear");
+    lv_obj_center(clear_label);
+
+    for (int i = 0; i < TRACE_MAX_COUNT; i++) {
+        lv_obj_t *mark = lv_obj_create(ball_game_screen);
+        lv_obj_set_size(mark, TRACE_MARK_W, TRACE_MARK_H);
+        lv_obj_set_style_radius(mark, 0, 0);
+        lv_obj_set_style_bg_color(mark, lv_color_black(), 0);
+        lv_obj_set_style_bg_opa(mark, LV_OPA_COVER, 0);
+        lv_obj_set_style_border_width(mark, 0, 0);
+        lv_obj_clear_flag(mark, LV_OBJ_FLAG_SCROLLABLE);
+        lv_obj_clear_flag(mark, LV_OBJ_FLAG_CLICKABLE);
+        lv_obj_add_flag(mark, LV_OBJ_FLAG_HIDDEN);
+        trace_marks[i] = mark;
+    }
 
     ball = lv_obj_create(ball_game_screen);
     lv_obj_set_size(ball, BALL_RADIUS * 2, BALL_RADIUS * 2);
