@@ -58,6 +58,13 @@ static lv_obj_t *trace_marks[TRACE_MAX_COUNT];
 static int trace_write_index;
 static int trace_tick_counter;
 
+/* Real elapsed time since the last tick, not the nominal
+ * PHYSICS_PERIOD_MS - LVGL render load (e.g. many trace marks) can
+ * delay when this timer actually fires, and a fixed dt would then
+ * under-apply damping, making the ball coast longer in wall-clock
+ * time than on a lighter screen. 0 means "no previous tick yet". */
+static int64_t last_tick_ms;
+
 static float ball_x = SCREEN_W / 2.0f;
 static float ball_y = SCREEN_H / 2.0f;
 static float ball_vx;
@@ -101,7 +108,13 @@ static void clear_trace_cb(lv_event_t *e)
 static void physics_timer_cb(lv_timer_t *timer)
 {
     (void)timer;
-    const float dt = PHYSICS_PERIOD_MS / 1000.0f;
+    int64_t now = k_uptime_get();
+    float dt = (last_tick_ms == 0) ? (PHYSICS_PERIOD_MS / 1000.0f)
+                                    : (now - last_tick_ms) / 1000.0f;
+    last_tick_ms = now;
+    if (dt > 0.2f) {
+        dt = 0.2f;
+    }
 
     int32_t raw_ax = mpu6050_input_get_accel_x_mms2();
     int32_t raw_ay = mpu6050_input_get_accel_y_mms2();
@@ -168,6 +181,7 @@ static void ball_game_visibility_cb(lv_event_t *e)
         ball_y = SCREEN_H / 2.0f;
         ball_vx = 0.0f;
         ball_vy = 0.0f;
+        last_tick_ms = 0;
         lv_timer_resume(physics_timer);
     } else {
         lv_timer_pause(physics_timer);
