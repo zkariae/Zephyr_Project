@@ -50,6 +50,11 @@
 #define TRACE_MARK_W 6
 #define TRACE_MARK_H 2
 
+/* Coordinate readout, off by default: only touched (text re-render)
+ * when visible, and throttled below the 33ms physics rate since a
+ * human doesn't need it refreshed that fast. */
+#define DATA_LABEL_PERIOD_TICKS 4
+
 static lv_obj_t *ball_game_screen;
 static lv_obj_t *ball;
 static lv_timer_t *physics_timer;
@@ -57,6 +62,10 @@ static lv_timer_t *physics_timer;
 static lv_obj_t *trace_marks[TRACE_MAX_COUNT];
 static int trace_write_index;
 static int trace_tick_counter;
+
+static lv_obj_t *data_label;
+static bool data_visible;
+static int data_tick_counter;
 
 /* Real elapsed time since the last tick, not the nominal
  * PHYSICS_PERIOD_MS - LVGL render load (e.g. many trace marks) can
@@ -103,6 +112,17 @@ static void clear_trace_cb(lv_event_t *e)
     trace_write_index = 0;
     printk("[ball_game]: Trace cleared\n");
     events_logs_add("[ball_game] Trace cleared");
+}
+
+static void toggle_data_cb(lv_event_t *e)
+{
+    (void)e;
+    data_visible = !data_visible;
+    if (data_visible) {
+        lv_obj_clear_flag(data_label, LV_OBJ_FLAG_HIDDEN);
+    } else {
+        lv_obj_add_flag(data_label, LV_OBJ_FLAG_HIDDEN);
+    }
 }
 
 static void physics_timer_cb(lv_timer_t *timer)
@@ -170,6 +190,15 @@ static void physics_timer_cb(lv_timer_t *timer)
         lv_obj_clear_flag(mark, LV_OBJ_FLAG_HIDDEN);
         trace_write_index = (trace_write_index + 1) % TRACE_MAX_COUNT;
     }
+
+    if (data_visible && ++data_tick_counter >= DATA_LABEL_PERIOD_TICKS) {
+        data_tick_counter = 0;
+        lv_label_set_text_fmt(data_label,
+                               "X:%d Y:%d\nVx:%d Vy:%d\nAx:%d Ay:%d",
+                               (int)ball_x, (int)ball_y,
+                               (int)ball_vx, (int)ball_vy,
+                               (int)raw_ax, (int)raw_ay);
+    }
 }
 
 /* Physics timer only runs while this screen is visible, to spare the
@@ -227,6 +256,22 @@ void ball_game_init(void)
     lv_obj_t *clear_label = lv_label_create(clear_btn);
     lv_label_set_text(clear_label, "Clear");
     lv_obj_center(clear_label);
+
+    lv_obj_t *data_btn = lv_button_create(ball_game_screen);
+    lv_obj_set_size(data_btn, 80, 30);
+    lv_obj_align(data_btn, LV_ALIGN_TOP_LEFT, 10, 130);
+    lv_obj_add_event_cb(data_btn, toggle_data_cb, LV_EVENT_CLICKED, NULL);
+
+    lv_obj_t *data_btn_label = lv_label_create(data_btn);
+    lv_label_set_text(data_btn_label, "Data");
+    lv_obj_center(data_btn_label);
+
+    data_label = lv_label_create(ball_game_screen);
+    lv_label_set_text(data_label, "X:0 Y:0\nVx:0 Vy:0\nAx:0 Ay:0");
+    lv_obj_set_style_text_color(data_label, lv_color_black(), 0);
+    lv_obj_align(data_label, LV_ALIGN_TOP_RIGHT, -10, 10);
+    lv_obj_clear_flag(data_label, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_add_flag(data_label, LV_OBJ_FLAG_HIDDEN);
 
     for (int i = 0; i < TRACE_MAX_COUNT; i++) {
         lv_obj_t *mark = lv_obj_create(ball_game_screen);
