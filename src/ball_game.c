@@ -14,6 +14,10 @@
 #define BALL_RADIUS 10
 
 #define PHYSICS_PERIOD_MS 33
+#define RENDER_PERIOD_MS 33
+
+#define PHYSICS_THREAD_STACK_SIZE 1024
+#define PHYSICS_THREAD_PRIORITY 5
 
 /* Tunable "feel" constants: how strongly a tilt accelerates the ball,
  * how fast it loses speed (friction), and how much energy a wall
@@ -57,7 +61,7 @@
 
 static lv_obj_t *ball_game_screen;
 static lv_obj_t *ball;
-static lv_timer_t *physics_timer;
+static lv_timer_t *render_timer;
 
 static lv_obj_t *trace_marks[TRACE_MAX_COUNT];
 static int trace_write_index;
@@ -67,17 +71,27 @@ static lv_obj_t *data_label;
 static bool data_visible;
 static int data_tick_counter;
 
-/* Real elapsed time since the last tick, not the nominal
- * PHYSICS_PERIOD_MS - LVGL render load (e.g. many trace marks) can
- * delay when this timer actually fires, and a fixed dt would then
- * under-apply damping, making the ball coast longer in wall-clock
- * time than on a lighter screen. 0 means "no previous tick yet". */
-static int64_t last_tick_ms;
+struct ball_state {
+    float x;
+    float y;
+    float vx;
+    float vy;
+    int32_t ax;
+    int32_t ay;
+};
 
-static float ball_x = SCREEN_W / 2.0f;
-static float ball_y = SCREEN_H / 2.0f;
-static float ball_vx;
-static float ball_vy;
+static struct ball_state shared_state = {
+    .x = SCREEN_W / 2.0f,
+    .y = SCREEN_H / 2.0f,
+};
+static struct k_spinlock state_lock;
+
+static atomic_t physics_active;
+static atomic_t reset_requested;
+K_SEM_DEFINE(physics_start_sem, 0, 1);
+
+K_THREAD_STACK_DEFINE(physics_thread_stack, PHYSICS_THREAD_STACK_SIZE);
+static struct k_thread physics_thread;
 
 static void back_to_menu_cb(lv_event_t *e)
 {
@@ -97,10 +111,7 @@ static void calibrate_cb(lv_event_t *e)
     printk("[ball_game]: Recalibrating MPU6050 zero-offset\n");
     events_logs_add("[ball_game] Recalibrating MPU6050");
     mpu6050_input_calibrate();
-    ball_x = SCREEN_W / 2.0f;
-    ball_y = SCREEN_H / 2.0f;
-    ball_vx = 0.0f;
-    ball_vy = 0.0f;
+    atomic_set(&reset_requested, 1);
 }
 
 static void clear_trace_cb(lv_event_t *e)
@@ -125,68 +136,113 @@ static void toggle_data_cb(lv_event_t *e)
     }
 }
 
-static void physics_timer_cb(lv_timer_t *timer)
+static void physics_thread_fn(void *p1, void *p2, void *p3)
+{
+    ARG_UNUSED(p1);
+    ARG_UNUSED(p2);
+    ARG_UNUSED(p3);
+
+    while (1) {
+        k_sem_take(&physics_start_sem, K_FOREVER);
+
+        float x = SCREEN_W / 2.0f;
+        float y = SCREEN_H / 2.0f;
+        float vx = 0.0f;
+        float vy = 0.0f;
+        int64_t next_wake = k_uptime_get();
+        int64_t last_tick_ms = next_wake;
+
+        while (atomic_get(&physics_active)) {
+            if (atomic_cas(&reset_requested, 1, 0)) {
+                x = SCREEN_W / 2.0f;
+                y = SCREEN_H / 2.0f;
+                vx = 0.0f;
+                vy = 0.0f;
+            }
+
+            int64_t now = k_uptime_get();
+            float dt = (now - last_tick_ms) / 1000.0f;
+            last_tick_ms = now;
+            if (dt > 2.0f * PHYSICS_PERIOD_MS / 1000.0f) {
+                dt = 2.0f * PHYSICS_PERIOD_MS / 1000.0f;
+            }
+
+            int32_t raw_ax = mpu6050_input_get_accel_x_mms2();
+            int32_t raw_ay = mpu6050_input_get_accel_y_mms2();
+
+            if (raw_ax > -ACCEL_DEADZONE_MMS2 && raw_ax < ACCEL_DEADZONE_MMS2) {
+                raw_ax = 0;
+            }
+            if (raw_ay > -ACCEL_DEADZONE_MMS2 && raw_ay < ACCEL_DEADZONE_MMS2) {
+                raw_ay = 0;
+            }
+
+            float ax = ACCEL_X_SIGN * raw_ax * ACCEL_TO_PX;
+            float ay = ACCEL_Y_SIGN * raw_ay * ACCEL_TO_PX;
+
+            vx = (vx + ax * dt) * (ax == 0.0f ? RELEASE_DAMPING : DAMPING);
+            vy = (vy + ay * dt) * (ay == 0.0f ? RELEASE_DAMPING : DAMPING);
+
+            if (ax == 0.0f && vx > -VELOCITY_EPSILON_PXS && vx < VELOCITY_EPSILON_PXS) {
+                vx = 0.0f;
+            }
+            if (ay == 0.0f && vy > -VELOCITY_EPSILON_PXS && vy < VELOCITY_EPSILON_PXS) {
+                vy = 0.0f;
+            }
+
+            x += vx * dt;
+            y += vy * dt;
+
+            if (x < BALL_RADIUS) {
+                x = BALL_RADIUS;
+                vx = -vx * RESTITUTION;
+            } else if (x > SCREEN_W - BALL_RADIUS) {
+                x = SCREEN_W - BALL_RADIUS;
+                vx = -vx * RESTITUTION;
+            }
+
+            if (y < BALL_RADIUS) {
+                y = BALL_RADIUS;
+                vy = -vy * RESTITUTION;
+            } else if (y > SCREEN_H - BALL_RADIUS) {
+                y = SCREEN_H - BALL_RADIUS;
+                vy = -vy * RESTITUTION;
+            }
+
+            K_SPINLOCK(&state_lock) {
+                shared_state.x = x;
+                shared_state.y = y;
+                shared_state.vx = vx;
+                shared_state.vy = vy;
+                shared_state.ax = raw_ax;
+                shared_state.ay = raw_ay;
+            }
+
+            next_wake += PHYSICS_PERIOD_MS;
+            k_sleep(K_TIMEOUT_ABS_MS(next_wake));
+        }
+    }
+}
+
+static void render_timer_cb(lv_timer_t *timer)
 {
     (void)timer;
-    int64_t now = k_uptime_get();
-    float dt = (last_tick_ms == 0) ? (PHYSICS_PERIOD_MS / 1000.0f)
-                                    : (now - last_tick_ms) / 1000.0f;
-    last_tick_ms = now;
-    if (dt > 0.2f) {
-        dt = 0.2f;
+
+    struct ball_state state;
+
+    K_SPINLOCK(&state_lock) {
+        state = shared_state;
     }
 
-    int32_t raw_ax = mpu6050_input_get_accel_x_mms2();
-    int32_t raw_ay = mpu6050_input_get_accel_y_mms2();
+    lv_obj_set_pos(ball, (int32_t)(state.x - BALL_RADIUS), (int32_t)(state.y - BALL_RADIUS));
 
-    if (raw_ax > -ACCEL_DEADZONE_MMS2 && raw_ax < ACCEL_DEADZONE_MMS2) {
-        raw_ax = 0;
-    }
-    if (raw_ay > -ACCEL_DEADZONE_MMS2 && raw_ay < ACCEL_DEADZONE_MMS2) {
-        raw_ay = 0;
-    }
-
-    float ax = ACCEL_X_SIGN * raw_ax * ACCEL_TO_PX;
-    float ay = ACCEL_Y_SIGN * raw_ay * ACCEL_TO_PX;
-
-    ball_vx = (ball_vx + ax * dt) * (ax == 0.0f ? RELEASE_DAMPING : DAMPING);
-    ball_vy = (ball_vy + ay * dt) * (ay == 0.0f ? RELEASE_DAMPING : DAMPING);
-
-    if (ax == 0.0f && ball_vx > -VELOCITY_EPSILON_PXS && ball_vx < VELOCITY_EPSILON_PXS) {
-        ball_vx = 0.0f;
-    }
-    if (ay == 0.0f && ball_vy > -VELOCITY_EPSILON_PXS && ball_vy < VELOCITY_EPSILON_PXS) {
-        ball_vy = 0.0f;
-    }
-
-    ball_x += ball_vx * dt;
-    ball_y += ball_vy * dt;
-
-    if (ball_x < BALL_RADIUS) {
-        ball_x = BALL_RADIUS;
-        ball_vx = -ball_vx * RESTITUTION;
-    } else if (ball_x > SCREEN_W - BALL_RADIUS) {
-        ball_x = SCREEN_W - BALL_RADIUS;
-        ball_vx = -ball_vx * RESTITUTION;
-    }
-
-    if (ball_y < BALL_RADIUS) {
-        ball_y = BALL_RADIUS;
-        ball_vy = -ball_vy * RESTITUTION;
-    } else if (ball_y > SCREEN_H - BALL_RADIUS) {
-        ball_y = SCREEN_H - BALL_RADIUS;
-        ball_vy = -ball_vy * RESTITUTION;
-    }
-
-    lv_obj_set_pos(ball, (int32_t)(ball_x - BALL_RADIUS), (int32_t)(ball_y - BALL_RADIUS));
-
-    float speed_sq = ball_vx * ball_vx + ball_vy * ball_vy;
+    float speed_sq = state.vx * state.vx + state.vy * state.vy;
     if (speed_sq > TRACE_MIN_SPEED_PXS * TRACE_MIN_SPEED_PXS &&
         ++trace_tick_counter >= TRACE_MARK_PERIOD_TICKS) {
         trace_tick_counter = 0;
 
         lv_obj_t *mark = trace_marks[trace_write_index];
-        lv_obj_set_pos(mark, (int32_t)ball_x - TRACE_MARK_W / 2, (int32_t)ball_y - TRACE_MARK_H / 2);
+        lv_obj_set_pos(mark, (int32_t)state.x - TRACE_MARK_W / 2, (int32_t)state.y - TRACE_MARK_H / 2);
         lv_obj_clear_flag(mark, LV_OBJ_FLAG_HIDDEN);
         trace_write_index = (trace_write_index + 1) % TRACE_MAX_COUNT;
     }
@@ -195,25 +251,21 @@ static void physics_timer_cb(lv_timer_t *timer)
         data_tick_counter = 0;
         lv_label_set_text_fmt(data_label,
                                "X:%d Y:%d\nVx:%d Vy:%d\nAx:%d Ay:%d",
-                               (int)ball_x, (int)ball_y,
-                               (int)ball_vx, (int)ball_vy,
-                               (int)raw_ax, (int)raw_ay);
+                               (int)state.x, (int)state.y,
+                               (int)state.vx, (int)state.vy,
+                               (int)state.ax, (int)state.ay);
     }
 }
 
-/* Physics timer only runs while this screen is visible, to spare the
- * LVGL thread. */
 static void ball_game_visibility_cb(lv_event_t *e)
 {
     if (lv_event_get_code(e) == LV_EVENT_SCREEN_LOADED) {
-        ball_x = SCREEN_W / 2.0f;
-        ball_y = SCREEN_H / 2.0f;
-        ball_vx = 0.0f;
-        ball_vy = 0.0f;
-        last_tick_ms = 0;
-        lv_timer_resume(physics_timer);
+        atomic_set(&physics_active, 1);
+        k_sem_give(&physics_start_sem);
+        lv_timer_resume(render_timer);
     } else {
-        lv_timer_pause(physics_timer);
+        atomic_set(&physics_active, 0);
+        lv_timer_pause(render_timer);
     }
 }
 
@@ -294,10 +346,15 @@ void ball_game_init(void)
     lv_obj_set_style_border_width(ball, 0, 0);
     lv_obj_clear_flag(ball, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_clear_flag(ball, LV_OBJ_FLAG_CLICKABLE);
-    lv_obj_set_pos(ball, (int32_t)(ball_x - BALL_RADIUS), (int32_t)(ball_y - BALL_RADIUS));
+    lv_obj_set_pos(ball, (int32_t)(shared_state.x - BALL_RADIUS), (int32_t)(shared_state.y - BALL_RADIUS));
 
-    physics_timer = lv_timer_create(physics_timer_cb, PHYSICS_PERIOD_MS, NULL);
-    lv_timer_pause(physics_timer);
+    render_timer = lv_timer_create(render_timer_cb, RENDER_PERIOD_MS, NULL);
+    lv_timer_pause(render_timer);
+
+    k_thread_create(&physics_thread, physics_thread_stack, PHYSICS_THREAD_STACK_SIZE,
+                     physics_thread_fn, NULL, NULL, NULL,
+                     PHYSICS_THREAD_PRIORITY, 0, K_NO_WAIT);
+    k_thread_name_set(&physics_thread, "ball_physics");
 
     lv_obj_add_event_cb(ball_game_screen, ball_game_visibility_cb,
                          LV_EVENT_SCREEN_LOADED, NULL);
