@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.20.0)
 find_package(Zephyr REQUIRED HINTS $ENV{ZEPHYR_BASE})
-project(Projet1)
+project(stm32f7_dashboard)
 
 # So src/generated/symtab_data.c can #include "pc_profiler.h" (quote-includes
 # only search the including file's own directory by default, and
