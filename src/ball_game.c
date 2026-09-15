@@ -186,26 +186,34 @@ static void calibrate_cb(lv_event_t *e)
     atomic_set(&reset_requested, 1);
 }
 
+static void clear_trace(void)
+{
+    for (int i = 0; i < TRACE_MAX_COUNT; i++) {
+        lv_obj_add_flag(trace_marks[i], LV_OBJ_FLAG_HIDDEN);
+    }
+    trace_write_index = 0;
+}
+
 /* Just re-arms the same reset mechanism calibrate_cb uses - the
  * physics thread clears its frozen game-over state and restarts the
  * timer on its next tick. The overlay itself is hidden by
  * render_timer_cb once it observes shared_state.game_over go false,
- * keeping all LVGL object mutation inside that single timer. */
+ * keeping all LVGL object mutation inside that single timer. The
+ * previous run's trail is cleared here, though, so the new game
+ * doesn't start with stale dashes from the ball that just died. */
 static void gameover_continue_cb(lv_event_t *e)
 {
     (void)e;
     printk("[ball_game]: Continue after game over\n");
     events_logs_add("[ball_game] Continue after game over");
+    clear_trace();
     atomic_set(&reset_requested, 1);
 }
 
 static void clear_trace_cb(lv_event_t *e)
 {
     (void)e;
-    for (int i = 0; i < TRACE_MAX_COUNT; i++) {
-        lv_obj_add_flag(trace_marks[i], LV_OBJ_FLAG_HIDDEN);
-    }
-    trace_write_index = 0;
+    clear_trace();
     printk("[ball_game]: Trace cleared\n");
     events_logs_add("[ball_game] Trace cleared");
 }
@@ -382,6 +390,7 @@ static void ball_game_visibility_cb(lv_event_t *e)
     if (lv_event_get_code(e) == LV_EVENT_SCREEN_LOADED) {
         gameover_shown = false;
         lv_obj_add_flag(gameover_overlay, LV_OBJ_FLAG_HIDDEN);
+        clear_trace();
         /* Clear the shared flag too, not just the overlay/gameover_shown
          * above - otherwise render_timer_cb can fire before the physics
          * thread (a separate thread) gets scheduled to overwrite this
