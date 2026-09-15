@@ -8,16 +8,17 @@
 #include "events_logs.h"
 #include "mpu6050_input.h"
 #include <lvgl_zephyr.h>
+#include <math.h>
 
 #define SCREEN_W 480
 #define SCREEN_H 272
 #define BALL_RADIUS 10
 
-/* Moving obstacles: small circles that bounce off the screen edges
- * like the ball itself - one horizontal, one vertical, see
- * obstacles_reset(). Touching one ends the game (see
- * physics_thread_fn). Neither starts at the screen center, since
- * that's also where the ball spawns on every (re)start. */
+/* Moving obstacles: small circles that chase the ball's current
+ * position at a fixed speed every physics tick (see
+ * physics_thread_fn), clamped to stay on screen. Touching one ends
+ * the game. Neither starts at the screen center, since that's also
+ * where the ball spawns on every (re)start. */
 #define OBSTACLE_COUNT 2
 #define OBSTACLE_RADIUS 9
 #define OBSTACLE_SPEED_PXS 70.0f
@@ -120,19 +121,20 @@ struct obstacle_phys {
     float vy;
 };
 
-/* Obstacle 0 moves purely horizontally, 1 purely vertically. Kept
- * away from the screen center, where the ball spawns. */
+/* Starting positions only - velocity is recomputed every tick to
+ * chase the ball (see physics_thread_fn), so it doesn't matter here.
+ * Kept away from the screen center, where the ball spawns. */
 static void obstacles_reset(struct obstacle_phys *obs)
 {
     obs[0].x = SCREEN_W * 0.25f;
     obs[0].y = 70.0f;
-    obs[0].vx = OBSTACLE_SPEED_PXS;
+    obs[0].vx = 0.0f;
     obs[0].vy = 0.0f;
 
     obs[1].x = SCREEN_W - 60.0f;
     obs[1].y = 60.0f;
     obs[1].vx = 0.0f;
-    obs[1].vy = OBSTACLE_SPEED_PXS;
+    obs[1].vy = 0.0f;
 }
 
 static void back_to_menu_cb(lv_event_t *e)
@@ -291,30 +293,41 @@ static void physics_thread_fn(void *p1, void *p2, void *p3)
                 bool hit = false;
 
                 for (int i = 0; i < OBSTACLE_COUNT; i++) {
+                    float dx = x - obstacles[i].x;
+                    float dy = y - obstacles[i].y;
+                    float dist = sqrtf(dx * dx + dy * dy);
+
+                    /* Steer straight at the ball's current position
+                     * every tick, at a fixed speed - a simple chase
+                     * rather than a fixed bounce pattern. Guard
+                     * against dist == 0 (ball and obstacle exactly
+                     * overlapping, which the hit check below already
+                     * catches as a collision anyway). */
+                    if (dist > 0.01f) {
+                        obstacles[i].vx = (dx / dist) * OBSTACLE_SPEED_PXS;
+                        obstacles[i].vy = (dy / dist) * OBSTACLE_SPEED_PXS;
+                    }
+
                     obstacles[i].x += obstacles[i].vx * dt;
                     obstacles[i].y += obstacles[i].vy * dt;
 
                     if (obstacles[i].x < OBSTACLE_RADIUS) {
                         obstacles[i].x = OBSTACLE_RADIUS;
-                        obstacles[i].vx = -obstacles[i].vx;
                     } else if (obstacles[i].x > SCREEN_W - OBSTACLE_RADIUS) {
                         obstacles[i].x = SCREEN_W - OBSTACLE_RADIUS;
-                        obstacles[i].vx = -obstacles[i].vx;
                     }
 
                     if (obstacles[i].y < OBSTACLE_RADIUS) {
                         obstacles[i].y = OBSTACLE_RADIUS;
-                        obstacles[i].vy = -obstacles[i].vy;
                     } else if (obstacles[i].y > SCREEN_H - OBSTACLE_RADIUS) {
                         obstacles[i].y = SCREEN_H - OBSTACLE_RADIUS;
-                        obstacles[i].vy = -obstacles[i].vy;
                     }
 
-                    float dx = x - obstacles[i].x;
-                    float dy = y - obstacles[i].y;
                     float min_dist = BALL_RADIUS + OBSTACLE_RADIUS;
+                    float post_dx = x - obstacles[i].x;
+                    float post_dy = y - obstacles[i].y;
 
-                    if (dx * dx + dy * dy < min_dist * min_dist) {
+                    if (post_dx * post_dx + post_dy * post_dy < min_dist * min_dist) {
                         hit = true;
                     }
                 }
