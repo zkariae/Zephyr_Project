@@ -13,16 +13,15 @@
 #define SCREEN_H 272
 #define BALL_RADIUS 10
 
-/* Sawtooth obstacle border drawn along all 4 screen edges. TRI_BASE
- * divides both SCREEN_W and SCREEN_H evenly (GCD(480, 272) = 16) so
- * the teeth tile edge-to-edge on every side with no gap or clipped
- * triangle. The ball's play area is inset by TRIANGLE_BAND so it
- * never actually overlaps the teeth yet - collision handling (game
- * over) is a separate follow-up. */
-#define TRI_BASE 16
-#define TRI_HEIGHT 14
-#define TRIANGLE_BAND TRI_HEIGHT
-#define TRIANGLE_COLOR lv_color_hex(0xFF8000)
+/* Moving obstacles: small circles that bounce off the screen edges
+ * like the ball itself - one horizontal, one vertical, see
+ * obstacles_reset(). Touching one ends the game (see
+ * physics_thread_fn). Neither starts at the screen center, since
+ * that's also where the ball spawns on every (re)start. */
+#define OBSTACLE_COUNT 2
+#define OBSTACLE_RADIUS 9
+#define OBSTACLE_SPEED_PXS 70.0f
+#define OBSTACLE_COLOR lv_color_hex(0xFF8000)
 
 #define PHYSICS_PERIOD_MS 33
 #define RENDER_PERIOD_MS 33
@@ -30,12 +29,12 @@
 #define PHYSICS_THREAD_STACK_SIZE 1024
 #define PHYSICS_THREAD_PRIORITY 5
 
-/* Tunable "feel" constants: how strongly a tilt accelerates the ball
- * and how fast it loses speed (friction). Walls no longer bounce the
- * ball (see physics_thread_fn) since touching the obstacle border
- * will become "game over" once collision handling lands. */
+/* Tunable "feel" constants: how strongly a tilt accelerates the ball,
+ * how fast it loses speed (friction), and how much energy a wall
+ * bounce keeps. */
 #define ACCEL_TO_PX 0.05f
 #define DAMPING 0.98f
+#define RESTITUTION 0.7f
 
 /* Stronger friction applied per-axis once its tilt input drops into
  * the deadzone, so residual velocity from the last active tilt bleeds
@@ -86,6 +85,8 @@ static lv_obj_t *gameover_overlay;
 static lv_obj_t *gameover_score_label;
 static bool gameover_shown;
 
+static lv_obj_t *obstacle_objs[OBSTACLE_COUNT];
+
 struct ball_state {
     float x;
     float y;
@@ -95,6 +96,8 @@ struct ball_state {
     int32_t ay;
     bool game_over;
     int64_t elapsed_ms;
+    float obstacle_x[OBSTACLE_COUNT];
+    float obstacle_y[OBSTACLE_COUNT];
 };
 
 static struct ball_state shared_state = {
@@ -110,59 +113,26 @@ K_SEM_DEFINE(physics_start_sem, 0, 1);
 K_THREAD_STACK_DEFINE(physics_thread_stack, PHYSICS_THREAD_STACK_SIZE);
 static struct k_thread physics_thread;
 
-/* Paints the orange sawtooth obstacle border on all 4 edges as vector
- * triangles instead of individual lv_obj_t children, since a couple
- * hundred small widgets would waste LVGL object memory for something
- * that never moves. Hooked to the screen's own LV_EVENT_DRAW_MAIN, so
- * it's drawn once as the screen's background, underneath the ball,
- * trace marks and buttons which are drawn afterwards as children. */
-static void obstacles_draw_cb(lv_event_t *e)
+struct obstacle_phys {
+    float x;
+    float y;
+    float vx;
+    float vy;
+};
+
+/* Obstacle 0 moves purely horizontally, 1 purely vertically. Kept
+ * away from the screen center, where the ball spawns. */
+static void obstacles_reset(struct obstacle_phys *obs)
 {
-    lv_layer_t *layer = lv_event_get_layer(e);
-    lv_obj_t *screen = lv_event_get_target_obj(e);
+    obs[0].x = SCREEN_W * 0.25f;
+    obs[0].y = 70.0f;
+    obs[0].vx = OBSTACLE_SPEED_PXS;
+    obs[0].vy = 0.0f;
 
-    lv_area_t coords;
-    lv_obj_get_coords(screen, &coords);
-
-    lv_draw_triangle_dsc_t dsc;
-    lv_draw_triangle_dsc_init(&dsc);
-    dsc.color = TRIANGLE_COLOR;
-    dsc.opa = LV_OPA_COVER;
-
-    int32_t count_h = SCREEN_W / TRI_BASE;
-    int32_t count_v = SCREEN_H / TRI_BASE;
-
-    for (int32_t i = 0; i < count_h; i++) {
-        int32_t x0 = coords.x1 + i * TRI_BASE;
-
-        /* Top edge, apex pointing down. */
-        dsc.p[0].x = x0;                dsc.p[0].y = coords.y1;
-        dsc.p[1].x = x0 + TRI_BASE;     dsc.p[1].y = coords.y1;
-        dsc.p[2].x = x0 + TRI_BASE / 2; dsc.p[2].y = coords.y1 + TRI_HEIGHT;
-        lv_draw_triangle(layer, &dsc);
-
-        /* Bottom edge, apex pointing up. */
-        dsc.p[0].x = x0;                dsc.p[0].y = coords.y2;
-        dsc.p[1].x = x0 + TRI_BASE;     dsc.p[1].y = coords.y2;
-        dsc.p[2].x = x0 + TRI_BASE / 2; dsc.p[2].y = coords.y2 - TRI_HEIGHT;
-        lv_draw_triangle(layer, &dsc);
-    }
-
-    for (int32_t i = 0; i < count_v; i++) {
-        int32_t y0 = coords.y1 + i * TRI_BASE;
-
-        /* Left edge, apex pointing right. */
-        dsc.p[0].x = coords.x1;         dsc.p[0].y = y0;
-        dsc.p[1].x = coords.x1;         dsc.p[1].y = y0 + TRI_BASE;
-        dsc.p[2].x = coords.x1 + TRI_HEIGHT; dsc.p[2].y = y0 + TRI_BASE / 2;
-        lv_draw_triangle(layer, &dsc);
-
-        /* Right edge, apex pointing left. */
-        dsc.p[0].x = coords.x2;         dsc.p[0].y = y0;
-        dsc.p[1].x = coords.x2;         dsc.p[1].y = y0 + TRI_BASE;
-        dsc.p[2].x = coords.x2 - TRI_HEIGHT; dsc.p[2].y = y0 + TRI_BASE / 2;
-        lv_draw_triangle(layer, &dsc);
-    }
+    obs[1].x = SCREEN_W - 60.0f;
+    obs[1].y = 60.0f;
+    obs[1].vx = 0.0f;
+    obs[1].vy = OBSTACLE_SPEED_PXS;
 }
 
 static void back_to_menu_cb(lv_event_t *e)
@@ -249,6 +219,9 @@ static void physics_thread_fn(void *p1, void *p2, void *p3)
         int64_t game_start_ms = k_uptime_get();
         int64_t next_wake = k_uptime_get();
         int64_t last_tick_ms = next_wake;
+        struct obstacle_phys obstacles[OBSTACLE_COUNT];
+
+        obstacles_reset(obstacles);
 
         while (atomic_get(&physics_active)) {
             if (atomic_cas(&reset_requested, 1, 0)) {
@@ -258,6 +231,7 @@ static void physics_thread_fn(void *p1, void *p2, void *p3)
                 vy = 0.0f;
                 game_over = false;
                 game_start_ms = k_uptime_get();
+                obstacles_reset(obstacles);
             }
 
             int64_t now = k_uptime_get();
@@ -298,22 +272,51 @@ static void physics_thread_fn(void *p1, void *p2, void *p3)
                 x += vx * dt;
                 y += vy * dt;
 
-                bool hit = false;
-
-                if (x < TRIANGLE_BAND + BALL_RADIUS) {
-                    x = TRIANGLE_BAND + BALL_RADIUS;
-                    hit = true;
-                } else if (x > SCREEN_W - TRIANGLE_BAND - BALL_RADIUS) {
-                    x = SCREEN_W - TRIANGLE_BAND - BALL_RADIUS;
-                    hit = true;
+                if (x < BALL_RADIUS) {
+                    x = BALL_RADIUS;
+                    vx = -vx * RESTITUTION;
+                } else if (x > SCREEN_W - BALL_RADIUS) {
+                    x = SCREEN_W - BALL_RADIUS;
+                    vx = -vx * RESTITUTION;
                 }
 
-                if (y < TRIANGLE_BAND + BALL_RADIUS) {
-                    y = TRIANGLE_BAND + BALL_RADIUS;
-                    hit = true;
-                } else if (y > SCREEN_H - TRIANGLE_BAND - BALL_RADIUS) {
-                    y = SCREEN_H - TRIANGLE_BAND - BALL_RADIUS;
-                    hit = true;
+                if (y < BALL_RADIUS) {
+                    y = BALL_RADIUS;
+                    vy = -vy * RESTITUTION;
+                } else if (y > SCREEN_H - BALL_RADIUS) {
+                    y = SCREEN_H - BALL_RADIUS;
+                    vy = -vy * RESTITUTION;
+                }
+
+                bool hit = false;
+
+                for (int i = 0; i < OBSTACLE_COUNT; i++) {
+                    obstacles[i].x += obstacles[i].vx * dt;
+                    obstacles[i].y += obstacles[i].vy * dt;
+
+                    if (obstacles[i].x < OBSTACLE_RADIUS) {
+                        obstacles[i].x = OBSTACLE_RADIUS;
+                        obstacles[i].vx = -obstacles[i].vx;
+                    } else if (obstacles[i].x > SCREEN_W - OBSTACLE_RADIUS) {
+                        obstacles[i].x = SCREEN_W - OBSTACLE_RADIUS;
+                        obstacles[i].vx = -obstacles[i].vx;
+                    }
+
+                    if (obstacles[i].y < OBSTACLE_RADIUS) {
+                        obstacles[i].y = OBSTACLE_RADIUS;
+                        obstacles[i].vy = -obstacles[i].vy;
+                    } else if (obstacles[i].y > SCREEN_H - OBSTACLE_RADIUS) {
+                        obstacles[i].y = SCREEN_H - OBSTACLE_RADIUS;
+                        obstacles[i].vy = -obstacles[i].vy;
+                    }
+
+                    float dx = x - obstacles[i].x;
+                    float dy = y - obstacles[i].y;
+                    float min_dist = BALL_RADIUS + OBSTACLE_RADIUS;
+
+                    if (dx * dx + dy * dy < min_dist * min_dist) {
+                        hit = true;
+                    }
                 }
 
                 if (hit) {
@@ -333,6 +336,10 @@ static void physics_thread_fn(void *p1, void *p2, void *p3)
                 shared_state.ay = raw_ay;
                 shared_state.game_over = game_over;
                 shared_state.elapsed_ms = game_over_elapsed_ms;
+                for (int i = 0; i < OBSTACLE_COUNT; i++) {
+                    shared_state.obstacle_x[i] = obstacles[i].x;
+                    shared_state.obstacle_y[i] = obstacles[i].y;
+                }
             }
 
             next_wake += PHYSICS_PERIOD_MS;
@@ -352,6 +359,12 @@ static void render_timer_cb(lv_timer_t *timer)
     }
 
     lv_obj_set_pos(ball, (int32_t)(state.x - BALL_RADIUS), (int32_t)(state.y - BALL_RADIUS));
+
+    for (int i = 0; i < OBSTACLE_COUNT; i++) {
+        lv_obj_set_pos(obstacle_objs[i],
+                       (int32_t)(state.obstacle_x[i] - OBSTACLE_RADIUS),
+                       (int32_t)(state.obstacle_y[i] - OBSTACLE_RADIUS));
+    }
 
     float speed_sq = state.vx * state.vx + state.vy * state.vy;
     if (speed_sq > TRACE_MIN_SPEED_PXS * TRACE_MIN_SPEED_PXS &&
@@ -420,7 +433,6 @@ void ball_game_init(void)
     ball_game_screen = lv_obj_create(NULL);
     lv_obj_set_style_bg_color(ball_game_screen, lv_color_white(), 0);
     lv_obj_clear_flag(ball_game_screen, LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_add_event_cb(ball_game_screen, obstacles_draw_cb, LV_EVENT_DRAW_MAIN, NULL);
 
     lv_obj_t *back_btn = lv_button_create(ball_game_screen);
     lv_obj_set_size(back_btn, 80, 30);
@@ -487,6 +499,18 @@ void ball_game_init(void)
     lv_obj_clear_flag(ball, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_clear_flag(ball, LV_OBJ_FLAG_CLICKABLE);
     lv_obj_set_pos(ball, (int32_t)(shared_state.x - BALL_RADIUS), (int32_t)(shared_state.y - BALL_RADIUS));
+
+    for (int i = 0; i < OBSTACLE_COUNT; i++) {
+        lv_obj_t *obs = lv_obj_create(ball_game_screen);
+        lv_obj_set_size(obs, OBSTACLE_RADIUS * 2, OBSTACLE_RADIUS * 2);
+        lv_obj_set_style_radius(obs, LV_RADIUS_CIRCLE, 0);
+        lv_obj_set_style_bg_color(obs, OBSTACLE_COLOR, 0);
+        lv_obj_set_style_bg_opa(obs, LV_OPA_COVER, 0);
+        lv_obj_set_style_border_width(obs, 0, 0);
+        lv_obj_clear_flag(obs, LV_OBJ_FLAG_SCROLLABLE);
+        lv_obj_clear_flag(obs, LV_OBJ_FLAG_CLICKABLE);
+        obstacle_objs[i] = obs;
+    }
 
     gameover_overlay = lv_obj_create(ball_game_screen);
     lv_obj_set_size(gameover_overlay, SCREEN_W, SCREEN_H);
