@@ -82,6 +82,10 @@ static lv_obj_t *data_label;
 static bool data_visible;
 static int data_tick_counter;
 
+static lv_obj_t *gameover_overlay;
+static lv_obj_t *gameover_score_label;
+static bool gameover_shown;
+
 struct ball_state {
     float x;
     float y;
@@ -89,6 +93,8 @@ struct ball_state {
     float vy;
     int32_t ax;
     int32_t ay;
+    bool game_over;
+    int64_t elapsed_ms;
 };
 
 static struct ball_state shared_state = {
@@ -180,6 +186,19 @@ static void calibrate_cb(lv_event_t *e)
     atomic_set(&reset_requested, 1);
 }
 
+/* Just re-arms the same reset mechanism calibrate_cb uses - the
+ * physics thread clears its frozen game-over state and restarts the
+ * timer on its next tick. The overlay itself is hidden by
+ * render_timer_cb once it observes shared_state.game_over go false,
+ * keeping all LVGL object mutation inside that single timer. */
+static void gameover_continue_cb(lv_event_t *e)
+{
+    (void)e;
+    printk("[ball_game]: Continue after game over\n");
+    events_logs_add("[ball_game] Continue after game over");
+    atomic_set(&reset_requested, 1);
+}
+
 static void clear_trace_cb(lv_event_t *e)
 {
     (void)e;
@@ -215,6 +234,11 @@ static void physics_thread_fn(void *p1, void *p2, void *p3)
         float y = SCREEN_H / 2.0f;
         float vx = 0.0f;
         float vy = 0.0f;
+        int32_t raw_ax = 0;
+        int32_t raw_ay = 0;
+        bool game_over = false;
+        int64_t game_over_elapsed_ms = 0;
+        int64_t game_start_ms = k_uptime_get();
         int64_t next_wake = k_uptime_get();
         int64_t last_tick_ms = next_wake;
 
@@ -224,6 +248,8 @@ static void physics_thread_fn(void *p1, void *p2, void *p3)
                 y = SCREEN_H / 2.0f;
                 vx = 0.0f;
                 vy = 0.0f;
+                game_over = false;
+                game_start_ms = k_uptime_get();
             }
 
             int64_t now = k_uptime_get();
@@ -233,46 +259,61 @@ static void physics_thread_fn(void *p1, void *p2, void *p3)
                 dt = 2.0f * PHYSICS_PERIOD_MS / 1000.0f;
             }
 
-            int32_t raw_ax = mpu6050_input_get_accel_x_mms2();
-            int32_t raw_ay = mpu6050_input_get_accel_y_mms2();
+            /* Ball is frozen where it hit an obstacle until "Continue"
+             * or "Menu" is picked (see gameover_continue_cb / the
+             * SCREEN_LOADED reset), so skip physics entirely and just
+             * keep republishing the frozen state below. */
+            if (!game_over) {
+                raw_ax = mpu6050_input_get_accel_x_mms2();
+                raw_ay = mpu6050_input_get_accel_y_mms2();
 
-            if (raw_ax > -ACCEL_DEADZONE_MMS2 && raw_ax < ACCEL_DEADZONE_MMS2) {
-                raw_ax = 0;
-            }
-            if (raw_ay > -ACCEL_DEADZONE_MMS2 && raw_ay < ACCEL_DEADZONE_MMS2) {
-                raw_ay = 0;
-            }
+                if (raw_ax > -ACCEL_DEADZONE_MMS2 && raw_ax < ACCEL_DEADZONE_MMS2) {
+                    raw_ax = 0;
+                }
+                if (raw_ay > -ACCEL_DEADZONE_MMS2 && raw_ay < ACCEL_DEADZONE_MMS2) {
+                    raw_ay = 0;
+                }
 
-            float ax = ACCEL_X_SIGN * raw_ax * ACCEL_TO_PX;
-            float ay = ACCEL_Y_SIGN * raw_ay * ACCEL_TO_PX;
+                float ax = ACCEL_X_SIGN * raw_ax * ACCEL_TO_PX;
+                float ay = ACCEL_Y_SIGN * raw_ay * ACCEL_TO_PX;
 
-            vx = (vx + ax * dt) * (ax == 0.0f ? RELEASE_DAMPING : DAMPING);
-            vy = (vy + ay * dt) * (ay == 0.0f ? RELEASE_DAMPING : DAMPING);
+                vx = (vx + ax * dt) * (ax == 0.0f ? RELEASE_DAMPING : DAMPING);
+                vy = (vy + ay * dt) * (ay == 0.0f ? RELEASE_DAMPING : DAMPING);
 
-            if (ax == 0.0f && vx > -VELOCITY_EPSILON_PXS && vx < VELOCITY_EPSILON_PXS) {
-                vx = 0.0f;
-            }
-            if (ay == 0.0f && vy > -VELOCITY_EPSILON_PXS && vy < VELOCITY_EPSILON_PXS) {
-                vy = 0.0f;
-            }
+                if (ax == 0.0f && vx > -VELOCITY_EPSILON_PXS && vx < VELOCITY_EPSILON_PXS) {
+                    vx = 0.0f;
+                }
+                if (ay == 0.0f && vy > -VELOCITY_EPSILON_PXS && vy < VELOCITY_EPSILON_PXS) {
+                    vy = 0.0f;
+                }
 
-            x += vx * dt;
-            y += vy * dt;
+                x += vx * dt;
+                y += vy * dt;
 
-            if (x < TRIANGLE_BAND + BALL_RADIUS) {
-                x = TRIANGLE_BAND + BALL_RADIUS;
-                vx = 0.0f;
-            } else if (x > SCREEN_W - TRIANGLE_BAND - BALL_RADIUS) {
-                x = SCREEN_W - TRIANGLE_BAND - BALL_RADIUS;
-                vx = 0.0f;
-            }
+                bool hit = false;
 
-            if (y < TRIANGLE_BAND + BALL_RADIUS) {
-                y = TRIANGLE_BAND + BALL_RADIUS;
-                vy = 0.0f;
-            } else if (y > SCREEN_H - TRIANGLE_BAND - BALL_RADIUS) {
-                y = SCREEN_H - TRIANGLE_BAND - BALL_RADIUS;
-                vy = 0.0f;
+                if (x < TRIANGLE_BAND + BALL_RADIUS) {
+                    x = TRIANGLE_BAND + BALL_RADIUS;
+                    hit = true;
+                } else if (x > SCREEN_W - TRIANGLE_BAND - BALL_RADIUS) {
+                    x = SCREEN_W - TRIANGLE_BAND - BALL_RADIUS;
+                    hit = true;
+                }
+
+                if (y < TRIANGLE_BAND + BALL_RADIUS) {
+                    y = TRIANGLE_BAND + BALL_RADIUS;
+                    hit = true;
+                } else if (y > SCREEN_H - TRIANGLE_BAND - BALL_RADIUS) {
+                    y = SCREEN_H - TRIANGLE_BAND - BALL_RADIUS;
+                    hit = true;
+                }
+
+                if (hit) {
+                    vx = 0.0f;
+                    vy = 0.0f;
+                    game_over = true;
+                    game_over_elapsed_ms = now - game_start_ms;
+                }
             }
 
             K_SPINLOCK(&state_lock) {
@@ -282,6 +323,8 @@ static void physics_thread_fn(void *p1, void *p2, void *p3)
                 shared_state.vy = vy;
                 shared_state.ax = raw_ax;
                 shared_state.ay = raw_ay;
+                shared_state.game_over = game_over;
+                shared_state.elapsed_ms = game_over_elapsed_ms;
             }
 
             next_wake += PHYSICS_PERIOD_MS;
@@ -321,11 +364,24 @@ static void render_timer_cb(lv_timer_t *timer)
                                (int)state.vx, (int)state.vy,
                                (int)state.ax, (int)state.ay);
     }
+
+    if (state.game_over && !gameover_shown) {
+        gameover_shown = true;
+        int32_t sec = (int32_t)(state.elapsed_ms / 1000);
+        int32_t hundredths = (int32_t)((state.elapsed_ms % 1000) / 10);
+        lv_label_set_text_fmt(gameover_score_label, "Score: %d.%02ds", (int)sec, (int)hundredths);
+        lv_obj_clear_flag(gameover_overlay, LV_OBJ_FLAG_HIDDEN);
+    } else if (!state.game_over && gameover_shown) {
+        gameover_shown = false;
+        lv_obj_add_flag(gameover_overlay, LV_OBJ_FLAG_HIDDEN);
+    }
 }
 
 static void ball_game_visibility_cb(lv_event_t *e)
 {
     if (lv_event_get_code(e) == LV_EVENT_SCREEN_LOADED) {
+        gameover_shown = false;
+        lv_obj_add_flag(gameover_overlay, LV_OBJ_FLAG_HIDDEN);
         atomic_set(&physics_active, 1);
         k_sem_give(&physics_start_sem);
         lv_timer_resume(render_timer);
@@ -414,6 +470,44 @@ void ball_game_init(void)
     lv_obj_clear_flag(ball, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_clear_flag(ball, LV_OBJ_FLAG_CLICKABLE);
     lv_obj_set_pos(ball, (int32_t)(shared_state.x - BALL_RADIUS), (int32_t)(shared_state.y - BALL_RADIUS));
+
+    gameover_overlay = lv_obj_create(ball_game_screen);
+    lv_obj_set_size(gameover_overlay, SCREEN_W, SCREEN_H);
+    lv_obj_set_pos(gameover_overlay, 0, 0);
+    lv_obj_set_style_radius(gameover_overlay, 0, 0);
+    lv_obj_set_style_bg_color(gameover_overlay, lv_color_black(), 0);
+    lv_obj_set_style_bg_opa(gameover_overlay, LV_OPA_70, 0);
+    lv_obj_set_style_border_width(gameover_overlay, 0, 0);
+    lv_obj_clear_flag(gameover_overlay, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_add_flag(gameover_overlay, LV_OBJ_FLAG_HIDDEN);
+
+    lv_obj_t *gameover_title = lv_label_create(gameover_overlay);
+    lv_label_set_text(gameover_title, "Game Over");
+    lv_obj_set_style_text_color(gameover_title, lv_color_white(), 0);
+    lv_obj_align(gameover_title, LV_ALIGN_CENTER, 0, -50);
+
+    gameover_score_label = lv_label_create(gameover_overlay);
+    lv_label_set_text(gameover_score_label, "Score: 0.00s");
+    lv_obj_set_style_text_color(gameover_score_label, lv_color_white(), 0);
+    lv_obj_align(gameover_score_label, LV_ALIGN_CENTER, 0, -20);
+
+    lv_obj_t *continue_btn = lv_button_create(gameover_overlay);
+    lv_obj_set_size(continue_btn, 120, 40);
+    lv_obj_align(continue_btn, LV_ALIGN_CENTER, 0, 30);
+    lv_obj_add_event_cb(continue_btn, gameover_continue_cb, LV_EVENT_CLICKED, NULL);
+
+    lv_obj_t *continue_label = lv_label_create(continue_btn);
+    lv_label_set_text(continue_label, "Continue");
+    lv_obj_center(continue_label);
+
+    lv_obj_t *gameover_menu_btn = lv_button_create(gameover_overlay);
+    lv_obj_set_size(gameover_menu_btn, 120, 40);
+    lv_obj_align(gameover_menu_btn, LV_ALIGN_CENTER, 0, 80);
+    lv_obj_add_event_cb(gameover_menu_btn, back_to_menu_cb, LV_EVENT_CLICKED, NULL);
+
+    lv_obj_t *gameover_menu_label = lv_label_create(gameover_menu_btn);
+    lv_label_set_text(gameover_menu_label, "Menu");
+    lv_obj_center(gameover_menu_label);
 
     render_timer = lv_timer_create(render_timer_cb, RENDER_PERIOD_MS, NULL);
     lv_timer_pause(render_timer);
