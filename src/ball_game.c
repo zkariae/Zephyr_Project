@@ -13,18 +13,29 @@
 #define SCREEN_H 272
 #define BALL_RADIUS 10
 
+/* Sawtooth obstacle border drawn along all 4 screen edges. TRI_BASE
+ * divides both SCREEN_W and SCREEN_H evenly (GCD(480, 272) = 16) so
+ * the teeth tile edge-to-edge on every side with no gap or clipped
+ * triangle. The ball's play area is inset by TRIANGLE_BAND so it
+ * never actually overlaps the teeth yet - collision handling (game
+ * over) is a separate follow-up. */
+#define TRI_BASE 16
+#define TRI_HEIGHT 14
+#define TRIANGLE_BAND TRI_HEIGHT
+#define TRIANGLE_COLOR lv_color_hex(0xFF8000)
+
 #define PHYSICS_PERIOD_MS 33
 #define RENDER_PERIOD_MS 33
 
 #define PHYSICS_THREAD_STACK_SIZE 1024
 #define PHYSICS_THREAD_PRIORITY 5
 
-/* Tunable "feel" constants: how strongly a tilt accelerates the ball,
- * how fast it loses speed (friction), and how much energy a wall
- * bounce keeps. */
+/* Tunable "feel" constants: how strongly a tilt accelerates the ball
+ * and how fast it loses speed (friction). Walls no longer bounce the
+ * ball (see physics_thread_fn) since touching the obstacle border
+ * will become "game over" once collision handling lands. */
 #define ACCEL_TO_PX 0.05f
 #define DAMPING 0.98f
-#define RESTITUTION 0.7f
 
 /* Stronger friction applied per-axis once its tilt input drops into
  * the deadzone, so residual velocity from the last active tilt bleeds
@@ -92,6 +103,61 @@ K_SEM_DEFINE(physics_start_sem, 0, 1);
 
 K_THREAD_STACK_DEFINE(physics_thread_stack, PHYSICS_THREAD_STACK_SIZE);
 static struct k_thread physics_thread;
+
+/* Paints the orange sawtooth obstacle border on all 4 edges as vector
+ * triangles instead of individual lv_obj_t children, since a couple
+ * hundred small widgets would waste LVGL object memory for something
+ * that never moves. Hooked to the screen's own LV_EVENT_DRAW_MAIN, so
+ * it's drawn once as the screen's background, underneath the ball,
+ * trace marks and buttons which are drawn afterwards as children. */
+static void obstacles_draw_cb(lv_event_t *e)
+{
+    lv_layer_t *layer = lv_event_get_layer(e);
+    lv_obj_t *screen = lv_event_get_target_obj(e);
+
+    lv_area_t coords;
+    lv_obj_get_coords(screen, &coords);
+
+    lv_draw_triangle_dsc_t dsc;
+    lv_draw_triangle_dsc_init(&dsc);
+    dsc.color = TRIANGLE_COLOR;
+    dsc.opa = LV_OPA_COVER;
+
+    int32_t count_h = SCREEN_W / TRI_BASE;
+    int32_t count_v = SCREEN_H / TRI_BASE;
+
+    for (int32_t i = 0; i < count_h; i++) {
+        int32_t x0 = coords.x1 + i * TRI_BASE;
+
+        /* Top edge, apex pointing down. */
+        dsc.p[0].x = x0;                dsc.p[0].y = coords.y1;
+        dsc.p[1].x = x0 + TRI_BASE;     dsc.p[1].y = coords.y1;
+        dsc.p[2].x = x0 + TRI_BASE / 2; dsc.p[2].y = coords.y1 + TRI_HEIGHT;
+        lv_draw_triangle(layer, &dsc);
+
+        /* Bottom edge, apex pointing up. */
+        dsc.p[0].x = x0;                dsc.p[0].y = coords.y2;
+        dsc.p[1].x = x0 + TRI_BASE;     dsc.p[1].y = coords.y2;
+        dsc.p[2].x = x0 + TRI_BASE / 2; dsc.p[2].y = coords.y2 - TRI_HEIGHT;
+        lv_draw_triangle(layer, &dsc);
+    }
+
+    for (int32_t i = 0; i < count_v; i++) {
+        int32_t y0 = coords.y1 + i * TRI_BASE;
+
+        /* Left edge, apex pointing right. */
+        dsc.p[0].x = coords.x1;         dsc.p[0].y = y0;
+        dsc.p[1].x = coords.x1;         dsc.p[1].y = y0 + TRI_BASE;
+        dsc.p[2].x = coords.x1 + TRI_HEIGHT; dsc.p[2].y = y0 + TRI_BASE / 2;
+        lv_draw_triangle(layer, &dsc);
+
+        /* Right edge, apex pointing left. */
+        dsc.p[0].x = coords.x2;         dsc.p[0].y = y0;
+        dsc.p[1].x = coords.x2;         dsc.p[1].y = y0 + TRI_BASE;
+        dsc.p[2].x = coords.x2 - TRI_HEIGHT; dsc.p[2].y = y0 + TRI_BASE / 2;
+        lv_draw_triangle(layer, &dsc);
+    }
+}
 
 static void back_to_menu_cb(lv_event_t *e)
 {
@@ -193,20 +259,20 @@ static void physics_thread_fn(void *p1, void *p2, void *p3)
             x += vx * dt;
             y += vy * dt;
 
-            if (x < BALL_RADIUS) {
-                x = BALL_RADIUS;
-                vx = -vx * RESTITUTION;
-            } else if (x > SCREEN_W - BALL_RADIUS) {
-                x = SCREEN_W - BALL_RADIUS;
-                vx = -vx * RESTITUTION;
+            if (x < TRIANGLE_BAND + BALL_RADIUS) {
+                x = TRIANGLE_BAND + BALL_RADIUS;
+                vx = 0.0f;
+            } else if (x > SCREEN_W - TRIANGLE_BAND - BALL_RADIUS) {
+                x = SCREEN_W - TRIANGLE_BAND - BALL_RADIUS;
+                vx = 0.0f;
             }
 
-            if (y < BALL_RADIUS) {
-                y = BALL_RADIUS;
-                vy = -vy * RESTITUTION;
-            } else if (y > SCREEN_H - BALL_RADIUS) {
-                y = SCREEN_H - BALL_RADIUS;
-                vy = -vy * RESTITUTION;
+            if (y < TRIANGLE_BAND + BALL_RADIUS) {
+                y = TRIANGLE_BAND + BALL_RADIUS;
+                vy = 0.0f;
+            } else if (y > SCREEN_H - TRIANGLE_BAND - BALL_RADIUS) {
+                y = SCREEN_H - TRIANGLE_BAND - BALL_RADIUS;
+                vy = 0.0f;
             }
 
             K_SPINLOCK(&state_lock) {
@@ -281,6 +347,7 @@ void ball_game_init(void)
     ball_game_screen = lv_obj_create(NULL);
     lv_obj_set_style_bg_color(ball_game_screen, lv_color_white(), 0);
     lv_obj_clear_flag(ball_game_screen, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_add_event_cb(ball_game_screen, obstacles_draw_cb, LV_EVENT_DRAW_MAIN, NULL);
 
     lv_obj_t *back_btn = lv_button_create(ball_game_screen);
     lv_obj_set_size(back_btn, 80, 30);
