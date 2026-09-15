@@ -382,6 +382,14 @@ static void ball_game_visibility_cb(lv_event_t *e)
     if (lv_event_get_code(e) == LV_EVENT_SCREEN_LOADED) {
         gameover_shown = false;
         lv_obj_add_flag(gameover_overlay, LV_OBJ_FLAG_HIDDEN);
+        /* Clear the shared flag too, not just the overlay/gameover_shown
+         * above - otherwise render_timer_cb can fire before the physics
+         * thread (a separate thread) gets scheduled to overwrite this
+         * stale "true" from the previous run's freeze, and immediately
+         * re-shows the overlay we just hid. */
+        K_SPINLOCK(&state_lock) {
+            shared_state.game_over = false;
+        }
         atomic_set(&physics_active, 1);
         k_sem_give(&physics_start_sem);
         lv_timer_resume(render_timer);
