@@ -4,6 +4,10 @@ Zephyr RTOS application for the **STM32F7508-DK**, with an LVGL touch UI
 covering system diagnostics, a PC-sampling CPU profiler, and a
 tilt-controlled game driven by an MPU6050 accelerometer/gyroscope.
 
+## Démo
+
+[![Démo stm32f7_dashboard](https://i.ytimg.com/vi/aI7hIi8hxNI/maxresdefault.jpg)](https://www.youtube.com/watch?v=aI7hIi8hxNI)
+
 ## Hardware
 
 - **Board**: STM32F7508-DK (480x272 LCD, capacitive touch)
