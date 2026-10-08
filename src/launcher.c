@@ -8,7 +8,7 @@
 #include "task_management.h"
 #include "events_logs.h"
 #include "live_variables.h"
-#include "plot_display.h"
+#include "ball_game.h"
 #include "async_printk.h"
 #include <lvgl_zephyr.h>
 #include <string.h>
@@ -26,7 +26,7 @@ static void open_system_overview(lv_event_t *e)
 {
     (void)e;
     printk("[launcher]: Opening system overview\n");
-    events_logs_add("[launcher] Ouverture System Overview");
+    events_logs_add("[launcher] Opening System Overview");
     lv_screen_load(system_overview_screen_get());
 }
 
@@ -34,7 +34,7 @@ static void open_task_management(lv_event_t *e)
 {
     (void)e;
     printk("[launcher]: Opening task management\n");
-    events_logs_add("[launcher] Ouverture Task Management");
+    events_logs_add("[launcher] Opening Task Management");
     lv_screen_load(task_management_screen_get());
 }
 
@@ -42,7 +42,7 @@ static void open_event_info(lv_event_t *e)
 {
     (void)e;
     printk("[launcher]: Opening event logs\n");
-    events_logs_add("[launcher] Ouverture Event Logs");
+    events_logs_add("[launcher] Opening Event Logs");
     lv_screen_load(events_logs_screen_get());
 }
 
@@ -50,16 +50,16 @@ static void open_live_variables(lv_event_t *e)
 {
     (void)e;
     printk("[launcher]: Opening live variables\n");
-    events_logs_add("[launcher] Ouverture Live Variables");
+    events_logs_add("[launcher] Opening Live Variables");
     lv_screen_load(live_variables_screen_get());
 }
 
-static void open_plot_display(lv_event_t *e)
+static void open_ball_game(lv_event_t *e)
 {
     (void)e;
-    printk("[launcher]: Opening plot display\n");
-    events_logs_add("[launcher] Ouverture Plot Display");
-    lv_screen_load(plot_display_screen_get());
+    printk("[launcher]: Opening ball game\n");
+    events_logs_add("[launcher] Opening Ball Game");
+    lv_screen_load(ball_game_screen_get());
 }
 
 /* Full-tile (160x136) button: solid color, white top-left text, no
@@ -172,12 +172,12 @@ void launcher_init(void)
                         "CPU\nPROFILER", open_task_management);
 
     /* Row 2 */
-    create_tile_button(launcher_screen, 0, TILE_H, lv_color_hex(0x00A651),
-                        "PLOT\nDISPLAY", open_plot_display);
-    create_tile_button(launcher_screen, TILE_W, TILE_H, lv_color_hex(0xFFC107),
+    create_tile_button(launcher_screen, 0, TILE_H, lv_color_hex(0xFFC107),
                         "EVENT\nLOGS", open_event_info);
-    create_tile_button(launcher_screen, 2 * TILE_W, TILE_H, lv_color_hex(0x1B5E73),
+    create_tile_button(launcher_screen, TILE_W, TILE_H, lv_color_hex(0x1B5E73),
                         "LIVE\nVARIABLES", open_live_variables);
+    create_tile_button(launcher_screen, 2 * TILE_W, TILE_H, lv_color_hex(0x00A651),
+                        "BALL\nGAME", open_ball_game);
 
     lv_screen_load(launcher_screen);
 

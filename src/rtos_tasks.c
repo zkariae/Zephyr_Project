@@ -1,12 +1,7 @@
 /**
  * @file
- * @brief RTOS thread monitor: table of live threads, state, priority, and
- *        free stack.
- *
- * DISABLED: not built (see CMakeLists.txt). Replaced by the Task
- * Management screen (src/task_management.c + src/pc_profiler.c), which
- * shows per-function CPU usage instead of per-thread state. Kept on disk
- * for reference / possible reuse, not deleted.
+ * @brief RTOS thread monitor (DISABLED, not built - see CMakeLists.txt);
+ *        replaced by task_management.c + pc_profiler.c, kept for reference.
  */
 
 #include "rtos_tasks.h"
@@ -37,7 +32,7 @@ static void back_to_menu_cb(lv_event_t *e)
 {
     (void)e;
     printk("[rtos_tasks]: Back to menu\n");
-    events_logs_add("[rtos_tasks] Retour menu");
+    events_logs_add("[rtos_tasks] Back to menu");
     lv_screen_load(launcher_screen_get());
 }
 

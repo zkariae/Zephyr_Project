@@ -15,12 +15,8 @@ void events_logs_init(void);
 lv_obj_t *events_logs_screen_get(void);
 
 /**
- * @brief Push a timestamped, printf-style line to the event log.
- *
- * Safe to call before events_logs_init(): boot-time events are held in a
- * static buffer and appear as soon as the screen is created.
- *
- * @param fmt printf-style format string (no trailing '\n').
+ * @brief Push a timestamped, printf-style line (no trailing '\n').
+ *        Safe before events_logs_init(): boot events wait in a static buffer.
  */
 void events_logs_add(const char *fmt, ...);
 

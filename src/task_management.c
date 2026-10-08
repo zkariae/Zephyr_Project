@@ -26,7 +26,7 @@ static void back_to_menu_cb(lv_event_t *e)
 {
     (void)e;
     printk("[task_management]: Back to menu\n");
-    events_logs_add("[task_management] Retour menu");
+    events_logs_add("[task_management] Back to menu");
     lv_screen_load(launcher_screen_get());
 }
 
@@ -67,12 +67,7 @@ static void profiler_timer_cb(lv_timer_t *timer)
         rows_prev[i] = rows[i];
     }
 
-    /* Split what's missing from the table above into two different things:
-     * - "Autres (connues)": real, named functions ranked below
-     *   TASK_MGMT_MAX_ROWS -- expected long tail on a busy LVGL screen,
-     *   not a problem.
-     * - "Non resolu": PCs that fell outside every known symbol range --
-     *   the actual coverage sanity check, should stay close to 0%. */
+
     uint32_t unresolved = pc_profiler_unresolved_samples();
     uint32_t long_tail = total > displayed + unresolved ? total - displayed - unresolved : 0;
 

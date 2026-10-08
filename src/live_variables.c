@@ -7,15 +7,15 @@
 #include "live_variables.h"
 #include "launcher.h"
 #include "events_logs.h"
-#include "adc_input.h"
 #include "watchdog.h"
+#include "mpu6050_input.h"
 #include <lvgl_zephyr.h>
 #include <lvgl_mem.h>
 #include <zephyr/kernel.h>
 #include <zephyr/sys/mem_stats.h>
 
 #define VARS_REFRESH_PERIOD_MS 1000
-#define VARS_ROW_CNT (5 + ADC_CHANNEL_COUNT)
+#define VARS_ROW_CNT 7
 
 static lv_obj_t *live_variables_screen;
 static lv_obj_t *vars_table;
@@ -25,7 +25,7 @@ static void back_to_menu_cb(lv_event_t *e)
 {
     (void)e;
     printk("[live_variables]: Back to menu\n");
-    events_logs_add("[live_variables] Retour menu");
+    events_logs_add("[live_variables] Back to menu");
     lv_screen_load(launcher_screen_get());
 }
 
@@ -34,26 +34,22 @@ static void vars_timer_cb(lv_timer_t *timer)
     (void)timer;
     struct sys_memory_stats heap_stats;
     size_t stack_unused = 0;
-    int32_t adc_mv[ADC_CHANNEL_COUNT];
 
     lvgl_heap_stats(&heap_stats);
     k_thread_stack_space_get(k_current_get(), &stack_unused);
 
     printk("[live_variables]: Refreshing variables\n");
-    for (int i = 0; i < ADC_CHANNEL_COUNT; i++) {
-        adc_mv[i] = adc_input_get_mv(i);
-        printk("[live_variables]: adc_mv[%d] = %d mV\n", i, adc_mv[i]);
-    }
 
     lv_table_set_cell_value_fmt(vars_table, 1, 1, "%u", (unsigned int)heap_stats.allocated_bytes);
     lv_table_set_cell_value_fmt(vars_table, 2, 1, "%u", (unsigned int)heap_stats.free_bytes);
     lv_table_set_cell_value_fmt(vars_table, 3, 1, "%u", (unsigned int)heap_stats.max_allocated_bytes);
     lv_table_set_cell_value_fmt(vars_table, 4, 1, "%u", (unsigned int)stack_unused);
-    for (int i = 0; i < ADC_CHANNEL_COUNT; i++) {
-        lv_table_set_cell_value_fmt(vars_table, 5 + i, 1, "%d", (int)adc_mv[i]);
-    }
-    lv_table_set_cell_value_fmt(vars_table, 5 + ADC_CHANNEL_COUNT, 1, "%u",
+    lv_table_set_cell_value_fmt(vars_table, 5, 1, "%u",
                                  (unsigned int)watchdog_get_remaining_ms());
+    lv_table_set_cell_value_fmt(vars_table, 6, 1, "%d",
+                                 (int)mpu6050_input_get_accel_x_mms2());
+    lv_table_set_cell_value_fmt(vars_table, 7, 1, "%d",
+                                 (int)mpu6050_input_get_accel_y_mms2());
 }
 
 /* Refresh timer only runs while this screen is visible, to spare the LVGL
@@ -142,11 +138,9 @@ void live_variables_init(void)
     lv_table_set_cell_value(vars_table, 2, 0, "LVGL heap free (B)");
     lv_table_set_cell_value(vars_table, 3, 0, "LVGL heap peak (B)");
     lv_table_set_cell_value(vars_table, 4, 0, "Thread free stack (B)");
-    lv_table_set_cell_value(vars_table, 5, 0, "ADC pot0 value (mV)");
-    lv_table_set_cell_value(vars_table, 6, 0, "ADC pot1 value (mV)");
-    lv_table_set_cell_value(vars_table, 7, 0, "ADC pot2 value (mV)");
-    lv_table_set_cell_value(vars_table, 8, 0, "ADC pot3 value (mV)");
-    lv_table_set_cell_value(vars_table, 9, 0, "Watchdog - time remaining (ms)");
+    lv_table_set_cell_value(vars_table, 5, 0, "Watchdog - time remaining (ms)");
+    lv_table_set_cell_value(vars_table, 6, 0, "MPU6050 accel X (mm/s2)");
+    lv_table_set_cell_value(vars_table, 7, 0, "MPU6050 accel Y (mm/s2)");
 
 
     lv_obj_clear_flag(live_variables_screen, LV_OBJ_FLAG_SCROLL_ELASTIC);

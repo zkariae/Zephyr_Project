@@ -57,7 +57,7 @@ static void back_to_menu_cb(lv_event_t *e)
 {
     (void)e;
     printk("[system_overview]: Back to menu\n");
-    events_logs_add("[system_overview] Retour menu");
+    events_logs_add("[system_overview] Back to menu");
     lv_screen_load(launcher_screen_get());
 }
 
