@@ -16,14 +16,9 @@
 #define SCREEN_H 272
 #define BALL_RADIUS 10
 
-/* Moving obstacles: small circles that chase the ball's current
- * position at a fixed speed every physics tick (see
- * physics_thread_fn), clamped to stay on screen. Touching one ends
- * the game. Neither starts at the screen center, since that's also
- * where the ball spawns on every (re)start. Since every obstacle
- * chases the same point, two of them can otherwise drift into each
- * other's spot and sit stacked for a while - OBSTACLE_MIN_GAP_PXS
- * keeps them pushed apart instead. */
+/* Two obstacles chase the ball at a fixed speed each physics tick; touching
+ * one ends the game. Neither starts at screen center (the ball's spawn), and
+ * OBSTACLE_MIN_GAP_PXS stops them drifting onto each other's spot. */
 #define OBSTACLE_COUNT 2
 #define OBSTACLE_RADIUS 9
 #define OBSTACLE_SPEED_PXS 70.0f
@@ -43,10 +38,8 @@
 #define DAMPING 0.98f
 #define RESTITUTION 0.7f
 
-/* Stronger friction applied per-axis once its tilt input drops into
- * the deadzone, so residual velocity from the last active tilt bleeds
- * off in well under a second instead of coasting for several seconds
- * on DAMPING alone. */
+/* Extra per-axis friction inside the deadzone: residual tilt velocity bleeds
+ * off in under a second instead of coasting on DAMPING for several. */
 #define RELEASE_DAMPING 0.80f
 
 /* Flip to -1 if a tilt moves the ball the wrong way - depends on how
@@ -59,12 +52,9 @@
 #define ACCEL_DEADZONE_MMS2 80.0f
 #define VELOCITY_EPSILON_PXS 2.0f
 
-/* Trail left behind while the ball is actually moving: a fixed pool of
- * dash marks reused as a ring buffer, so it stays bounded instead of
- * growing the LVGL heap forever. Plain solid-color rectangles rather
- * than text labels - font glyph rendering (anti-aliased) is far more
- * expensive to redraw than a flat fill, and cost adds up once dozens
- * of marks sit under the ball's repeatedly-invalidated redraw area. */
+/* Trail: fixed pool of dash marks reused as a ring buffer (bounded, never
+ * grows the LVGL heap). Plain rects, not labels - glyph rendering is far
+ * costlier under the ball's repeatedly-invalidated redraw area. */
 #define TRACE_MAX_COUNT 150
 #define TRACE_MARK_PERIOD_TICKS 3
 #define TRACE_MIN_SPEED_PXS 3.0f
@@ -209,10 +199,8 @@ static void back_to_menu_cb(lv_event_t *e)
     lv_screen_load(launcher_screen_get());
 }
 
-/* Recalibrates the MPU6050's zero-offset in whatever orientation it's
- * held in right now - lets "neutral" be redefined on demand instead of
- * only at boot. mpu6050_input_calibrate() just signals a background
- * thread, so this doesn't block the LVGL/touch context. */
+/* Re-zeros the MPU6050 in whatever orientation it's held right now; only
+ * signals the background thread, so it never blocks the LVGL/touch context. */
 static void calibrate_cb(lv_event_t *e)
 {
     (void)e;
@@ -230,13 +218,9 @@ static void clear_trace(void)
     trace_write_index = 0;
 }
 
-/* Just re-arms the same reset mechanism calibrate_cb uses - the
- * physics thread clears its frozen game-over state and restarts the
- * timer on its next tick. The overlay itself is hidden by
- * render_timer_cb once it observes shared_state.game_over go false,
- * keeping all LVGL object mutation inside that single timer. The
- * previous run's trail is cleared here, though, so the new game
- * doesn't start with stale dashes from the ball that just died. */
+/* Re-arms the same reset as calibrate_cb: the physics thread unfreezes and
+ * restarts the timer, and render_timer_cb hides the overlay once it sees
+ * game_over false (all LVGL mutation stays in that timer). Trail cleared here. */
 static void gameover_continue_cb(lv_event_t *e)
 {
     (void)e;
@@ -307,9 +291,7 @@ static void physics_thread_fn(void *p1, void *p2, void *p3)
                 dt = 2.0f * PHYSICS_PERIOD_MS / 1000.0f;
             }
 
-            /* Ball is frozen where it hit an obstacle until "Continue"
-             * or "Menu" is picked (see gameover_continue_cb / the
-             * SCREEN_LOADED reset), so skip physics entirely and just
+            /* Frozen where it hit until "Continue"/"Menu": skip physics and
              * keep republishing the frozen state below. */
             if (!game_over) {
                 raw_ax = mpu6050_input_get_accel_x_mms2();
@@ -361,12 +343,8 @@ static void physics_thread_fn(void *p1, void *p2, void *p3)
                     float dy = y - obstacles[i].y;
                     float dist = sqrtf(dx * dx + dy * dy);
 
-                    /* Steer straight at the ball's current position
-                     * every tick, at a fixed speed - a simple chase
-                     * rather than a fixed bounce pattern. Guard
-                     * against dist == 0 (ball and obstacle exactly
-                     * overlapping, which the hit check below already
-                     * catches as a collision anyway). */
+                    /* Steer at the ball's current position each tick (chase,
+                     * not bounce). dist == 0 is covered by the hit check. */
                     if (dist > 0.01f) {
                         obstacles[i].vx = (dx / dist) * OBSTACLE_SPEED_PXS;
                         obstacles[i].vy = (dy / dist) * OBSTACLE_SPEED_PXS;
@@ -377,11 +355,8 @@ static void physics_thread_fn(void *p1, void *p2, void *p3)
                     obstacle_clamp(&obstacles[i]);
                 }
 
-                /* All obstacles chase the same point, so without this
-                 * a pair can drift into the same spot and sit stacked
-                 * on top of each other for a while. Push any pair
-                 * closer than OBSTACLE_MIN_GAP_PXS apart symmetrically
-                 * along the line between them. */
+                /* All obstacles chase the same point, so push any pair closer
+                 * than OBSTACLE_MIN_GAP_PXS apart, symmetrically. */
                 for (int i = 0; i < OBSTACLE_COUNT; i++) {
                     for (int j = i + 1; j < OBSTACLE_COUNT; j++) {
                         float odx = obstacles[j].x - obstacles[i].x;
@@ -518,11 +493,9 @@ static void ball_game_visibility_cb(lv_event_t *e)
         gameover_shown = false;
         lv_obj_add_flag(gameover_overlay, LV_OBJ_FLAG_HIDDEN);
         clear_trace();
-        /* Clear the shared flag too, not just the overlay/gameover_shown
-         * above - otherwise render_timer_cb can fire before the physics
-         * thread (a separate thread) gets scheduled to overwrite this
-         * stale "true" from the previous run's freeze, and immediately
-         * re-shows the overlay we just hid. */
+        /* Clear the shared flag too: render_timer_cb can fire before this
+         * thread runs, see the stale true from last run's freeze, and
+         * immediately re-show the overlay we just hid. */
         K_SPINLOCK(&state_lock) {
             shared_state.game_over = false;
         }

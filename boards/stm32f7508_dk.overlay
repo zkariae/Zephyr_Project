@@ -1,7 +1,6 @@
 /*
- * Internal flash (64 KB) is too small for LVGL: the app runs XIP from
- * external QSPI at 0x90000000, reusing stm32f7.dtsi's "quadspi_memory"
- * node (shrunk to 1 MB) marked as zephyr,flash.
+ * Internal flash (64 KB) too small for LVGL: the app runs XIP from external
+ * QSPI at 0x90000000 (stm32f7.dtsi "quadspi_memory", shrunk to 1 MB).
  */
 
 / {
@@ -15,17 +14,16 @@
 	zephyr,memory-region = "QSPI_XIP";
 
 	/*
-	 * Dropped: the inherited ATTR_MPU_EXTMEM (stm32f7.dtsi) added a
-	 * higher-priority NO_ACCESS MPU region that shadowed FLASH_0 and
-	 * HardFaulted on any execute from 0x90000000 (see bootloader-qspi.md).
+	 * Dropped: the inherited ATTR_MPU_EXTMEM (stm32f7.dtsi) shadowed
+	 * FLASH_0 with a NO_ACCESS region, HardFaulting any execute from
+	 * 0x90000000 (see bootloader-qspi.md).
 	 */
 	/delete-property/ zephyr,memory-attr;
 };
 
 /*
- * ADC1 itself is disabled by default in stm32f7.dtsi; die_temp/vref
- * below reference its internal channels (17/18) directly and need it
- * enabled, with no pinctrl or DMA required.
+ * ADC1 is disabled by default in stm32f7.dtsi; die_temp/vref below use its
+ * internal channels (17/18) directly - no pinctrl or DMA.
  */
 &adc1 {
 	st,adc-prescaler = <4>;
@@ -33,10 +31,8 @@
 };
 
 /*
- * Internal die temperature and VREFINT: ready-made nodes from
- * stm32f7.dtsi, just disabled by default. Both go through ADC1
- * (internal channels, no pinctrl needed); src/temperature.c handles
- * multiplexing and calibration.
+ * die_temp/vref: ready-made stm32f7.dtsi nodes, just disabled by default;
+ * src/temperature.c handles multiplexing and calibration.
  */
 &die_temp {
 	status = "okay";
@@ -51,9 +47,8 @@
 };
 
 /*
- * MPU6050 accel/gyro on I2C1 (PB8/PB9, exposed on the Arduino R3
- * connector as D15/D14) - i2c1 is already enabled by default in
- * stm32f7508_dk.dts. AD0 wired to GND -> address 0x68.
+ * MPU6050 on I2C1 (PB8/PB9 = Arduino D15/D14; i2c1 already enabled in
+ * stm32f7508_dk.dts). AD0 tied to GND -> address 0x68.
  */
 &i2c1 {
 	mpu6050: mpu6050@68 {
@@ -63,10 +58,8 @@
 };
 
 /*
- * Hardware IWDG watchdog: ready-made stm32f7.dtsi node, just disabled
- * by default. Runs off its own LSI timer, independent of the core -
- * resets the board if it stops being fed. Configured and fed from
- * src/watchdog.c.
+ * IWDG: ready-made stm32f7.dtsi node, disabled by default; runs off its own
+ * LSI timer. Configured and fed from src/watchdog.c.
  */
 &iwdg {
 	status = "okay";

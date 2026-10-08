@@ -1,8 +1,6 @@
 /**
  * @file
- * @brief Task Management screen: PC-sampling profiler table (function,
- *        % CPU, samples, address, size). Replaces the former RTOS Tasks
- *        thread monitor (src/rtos_tasks.c, kept but no longer built).
+ * @brief Task Management screen: PC profiler table; replaces rtos_tasks.c.
  */
 
 #ifndef APP_TASK_MANAGEMENT_H_

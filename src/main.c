@@ -1,8 +1,6 @@
 /**
  * @file
- * @brief Application entry point: boots the display, runs the splash
- *        sequence, then initializes every screen module and the
- *        background watchdog feed loop.
+ * @brief Entry point: display boot, splash, every screen module, watchdog loop.
  */
 
 #include <zephyr/kernel.h>
