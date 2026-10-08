@@ -15,14 +15,9 @@
 void async_printk_init(void);
 
 /**
- * @brief Get the last time/date received from the host link (see
- *        tools/send_time.py), and whether the link is currently up.
- *
- * @param time_out Buffer of at least ASYNC_PRINTK_TIME_LEN+1 bytes, filled
- *                 only if a frame has already been received.
- * @param date_out Buffer of at least ASYNC_PRINTK_DATE_LEN+1 bytes, filled
- *                 only if a frame has already been received.
- * @param connected Set to false if no frame was received in the last 3 s.
+ * @brief Last time/date from the host link (tools/send_time.py) and link state.
+ * @param time_out/date_out Filled only once a frame has been received.
+ * @param connected False if no frame arrived in the last 3 s.
  * @return true if at least one frame has ever been received.
  */
 bool async_printk_get_link_status(char time_out[ASYNC_PRINTK_TIME_LEN + 1],

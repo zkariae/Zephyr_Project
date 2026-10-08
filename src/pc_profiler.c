@@ -1,17 +1,8 @@
 /**
  * @file
- * @brief PC-sampling profiler implementation: a dedicated hardware timer
- *        (TIM7, 1 kHz) interrupts directly through a naked trampoline that
- *        reads the PC the CPU hardware auto-stacked at exception entry —
- *        i.e. wherever foreground code was actually executing the instant
- *        before the interrupt fired.
- *
- * Earlier revision polled DWT->PCSR from a Zephyr k_timer callback; on this
- * board that read back the profiler's own PC (100% self-attribution on
- * hardware), since PCSR here doesn't free-run asynchronously in the
- * background the way a debug probe's trace hardware does. Reading the
- * hardware-stacked frame of a raw ISR is the standard, reliable technique
- * (the classic "poor man's profiler").
+ * @brief PC-sampling profiler: TIM7 (1 kHz) ISR reads the PC the hardware
+ *        auto-stacked at exception entry (the classic "poor man's profiler").
+ *        Rationale for avoiding DWT->PCSR: docs/pc-profiler.md.
  */
 
 #include "pc_profiler.h"
@@ -25,9 +16,7 @@
 
 #define PC_PROFILER_MAX_SYMBOLS 2500 /* current build has ~1900 text symbols */
 
-/* TIM7 kernel clock = 108MHz (SYSCLK=216MHz, APB1 prescaler=4, so
- * TIMxCLK = 2*PCLK1 per the STM32 rule when the APBx prescaler != 1).
- * PSC=107 -> 108MHz/108 = 1MHz counter clock; ARR=999 -> 1MHz/1000 = 1kHz. */
+/* TIM7 clock 108MHz (APB1 x2 rule): PSC=107 -> 1MHz, ARR=999 -> 1kHz. */
 #define PC_PROFILER_TIM7_PSC 107u
 #define PC_PROFILER_TIM7_ARR 999u
 
@@ -57,15 +46,9 @@ static int find_symbol_index(uint32_t pc)
     return -1;
 }
 
-/* Ordinary C function reached by tail branch (not call) from the naked
- * trampoline below, so `lr` on entry is still the original EXC_RETURN value
- * the hardware set at exception entry: this function's own compiler-
- * generated prologue/epilogue saves and restores it like any other
- * callee-saved register, and returns through it, performing a real
- * exception return (unstacking the frame from the correct MSP/PSP). */
-/* used: only ever reached via the `b` in the naked trampoline's inline asm,
- * invisible to the compiler's normal call graph -- without this it gets
- * optimized away as dead code, leaving the branch target undefined. */
+/* Tail-branched by the trampoline: lr is still EXC_RETURN, so this returns
+ * through a real exception return (correct MSP/PSP). */
+/* Only reached from the trampoline's asm "b": (used) stops it being DCE'd. */
 static void __attribute__((used)) pc_profiler_tim7_isr_c(uint32_t *frame)
 {
     LL_TIM_ClearFlag_UPDATE(TIM7); /* must clear before return, or the IRQ re-fires immediately */
@@ -81,14 +64,10 @@ static void __attribute__((used)) pc_profiler_tim7_isr_c(uint32_t *frame)
     atomic_inc(&total_samples);
 }
 
-/* Naked: no compiler prologue, so `lr` here is exactly the hardware
- * EXC_RETURN value. EXC_RETURN bit 2 (SPSEL) tells us whether the
- * interrupted context was using MSP or PSP; that stack pointer's current
- * value points straight at the 8-word hardware-stacked frame. Branching
- * (not calling) into the C handler preserves `lr` so it can perform the
- * actual exception return. Installed via IRQ_DIRECT_CONNECT so the vector
- * table jumps here directly -- a normal IRQ_CONNECT goes through Zephyr's
- * shared _isr_wrapper first, which would overwrite lr before we see it. */
+/* Naked: no prologue, so lr is exactly EXC_RETURN; bit 2 (SPSEL) picks MSP/PSP,
+ * whose value points at the 8-word hardware-stacked frame (-> r0).
+ * Branch (not call) keeps lr for the real exception return; IRQ_DIRECT_CONNECT
+ * so the vector jumps here directly (IRQ_CONNECT's _isr_wrapper would clobber lr). */
 static void __attribute__((naked)) pc_profiler_tim7_isr(void)
 {
     __asm volatile (
@@ -111,8 +90,7 @@ void pc_profiler_init(void)
     LL_TIM_EnableIT_UPDATE(TIM7);
     LL_TIM_EnableCounter(TIM7);
 
-    /* Lowest priority: this statistical sampler must never preempt LTDC,
-     * DMA, or any other peripheral IRQ (all at priority 0 on this board). */
+    /* Lowest priority: never preempt LTDC, DMA or any peripheral IRQ (all prio 0). */
     IRQ_DIRECT_CONNECT(TIM7_IRQn, IRQ_PRIO_LOWEST, pc_profiler_tim7_isr, 0);
     irq_enable(TIM7_IRQn);
 }
