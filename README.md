@@ -56,13 +56,19 @@ west build -b stm32f7508_dk .
 | Screen | Description |
 |---|---|
 | System Overview | Board info, die temperature/Vref, uptime, PC-synced clock |
-| CPU Profiler | PC-sampling profiler table (function, % CPU, samples) |
+| CPU Profiler | PC-sampling profiler table (function, % CPU, samples, address, size) |
 | Event Logs | Circular buffer of timestamped log lines |
 | Live Variables | LVGL heap and thread stack diagnostics |
-| Ball Game | Tilt-controlled bouncing ball, with trail and live telemetry |
+| Ball Game | Tilt-controlled bouncing ball vs 2 chasing obstacles; game over with score, persistent best score, Continue/Menu |
 
 Also included: an IWDG hardware watchdog with boot-time reset-cause
 reporting, and a PC time-sync link over UART.
+
+The ball game's best score survives reboots: it is stored in a dedicated
+32 KB partition in internal flash (`highscore_partition` at offset
+`0x8000`, below the `boot_qspi` bootloader's 23.5 KB image). `west flash`
+of this app never touches it — the generated image targets the QSPI XIP
+window (`0x90000000`) only.
 
 ## License
 
