@@ -72,3 +72,16 @@
 	status = "okay";
 };
 
+&flash0 {
+	partitions {
+		compatible = "fixed-partitions";
+		#address-cells = <1>;
+		#size-cells = <1>;
+
+		highscore_partition: partition@8000 {
+			label = "highscore";
+			reg = <0x00008000 DT_SIZE_K(32)>;
+		};
+	};
+};
+

@@ -9,6 +9,8 @@
 #include "mpu6050_input.h"
 #include <lvgl_zephyr.h>
 #include <math.h>
+#include <zephyr/drivers/flash.h>
+#include <zephyr/storage/flash_map.h>
 
 #define SCREEN_W 480
 #define SCREEN_H 272
@@ -18,10 +20,14 @@
  * position at a fixed speed every physics tick (see
  * physics_thread_fn), clamped to stay on screen. Touching one ends
  * the game. Neither starts at the screen center, since that's also
- * where the ball spawns on every (re)start. */
+ * where the ball spawns on every (re)start. Since every obstacle
+ * chases the same point, two of them can otherwise drift into each
+ * other's spot and sit stacked for a while - OBSTACLE_MIN_GAP_PXS
+ * keeps them pushed apart instead. */
 #define OBSTACLE_COUNT 2
 #define OBSTACLE_RADIUS 9
 #define OBSTACLE_SPEED_PXS 70.0f
+#define OBSTACLE_MIN_GAP_PXS (4.0f * OBSTACLE_RADIUS)
 #define OBSTACLE_COLOR lv_color_hex(0xFF8000)
 
 #define PHYSICS_PERIOD_MS 33
@@ -84,6 +90,7 @@ static int data_tick_counter;
 
 static lv_obj_t *gameover_overlay;
 static lv_obj_t *gameover_score_label;
+static lv_obj_t *gameover_best_label;
 static bool gameover_shown;
 
 static lv_obj_t *obstacle_objs[OBSTACLE_COUNT];
@@ -135,6 +142,63 @@ static void obstacles_reset(struct obstacle_phys *obs)
     obs[1].y = 60.0f;
     obs[1].vx = 0.0f;
     obs[1].vy = 0.0f;
+}
+
+static void obstacle_clamp(struct obstacle_phys *o)
+{
+    if (o->x < OBSTACLE_RADIUS) {
+        o->x = OBSTACLE_RADIUS;
+    } else if (o->x > SCREEN_W - OBSTACLE_RADIUS) {
+        o->x = SCREEN_W - OBSTACLE_RADIUS;
+    }
+
+    if (o->y < OBSTACLE_RADIUS) {
+        o->y = OBSTACLE_RADIUS;
+    } else if (o->y > SCREEN_H - OBSTACLE_RADIUS) {
+        o->y = SCREEN_H - OBSTACLE_RADIUS;
+    }
+}
+
+#define HIGHSCORE_MAGIC 0x48534331 /* "HSC1" */
+
+struct highscore_record {
+    uint32_t magic;
+    uint32_t best_ms;
+};
+
+static uint32_t best_score_ms;
+
+static void highscore_load(void)
+{
+    const struct device *dev = PARTITION_DEVICE(highscore_partition);
+    struct highscore_record rec;
+
+    if (flash_read(dev, PARTITION_OFFSET(highscore_partition), &rec, sizeof(rec)) == 0 &&
+        rec.magic == HIGHSCORE_MAGIC) {
+        best_score_ms = rec.best_ms;
+    }
+}
+
+static void highscore_save(uint32_t best_ms)
+{
+    const struct device *dev = PARTITION_DEVICE(highscore_partition);
+    off_t offset = PARTITION_OFFSET(highscore_partition);
+    struct highscore_record rec = {
+        .magic = HIGHSCORE_MAGIC,
+        .best_ms = best_ms,
+    };
+    int ret;
+
+    ret = flash_erase(dev, offset, PARTITION_SIZE(highscore_partition));
+    if (ret != 0) {
+        printk("[ball_game]: highscore flash_erase failed (%d)\n", ret);
+        return;
+    }
+
+    ret = flash_write(dev, offset, &rec, sizeof(rec));
+    if (ret != 0) {
+        printk("[ball_game]: highscore flash_write failed (%d)\n", ret);
+    }
 }
 
 static void back_to_menu_cb(lv_event_t *e)
@@ -310,19 +374,47 @@ static void physics_thread_fn(void *p1, void *p2, void *p3)
 
                     obstacles[i].x += obstacles[i].vx * dt;
                     obstacles[i].y += obstacles[i].vy * dt;
+                    obstacle_clamp(&obstacles[i]);
+                }
 
-                    if (obstacles[i].x < OBSTACLE_RADIUS) {
-                        obstacles[i].x = OBSTACLE_RADIUS;
-                    } else if (obstacles[i].x > SCREEN_W - OBSTACLE_RADIUS) {
-                        obstacles[i].x = SCREEN_W - OBSTACLE_RADIUS;
+                /* All obstacles chase the same point, so without this
+                 * a pair can drift into the same spot and sit stacked
+                 * on top of each other for a while. Push any pair
+                 * closer than OBSTACLE_MIN_GAP_PXS apart symmetrically
+                 * along the line between them. */
+                for (int i = 0; i < OBSTACLE_COUNT; i++) {
+                    for (int j = i + 1; j < OBSTACLE_COUNT; j++) {
+                        float odx = obstacles[j].x - obstacles[i].x;
+                        float ody = obstacles[j].y - obstacles[i].y;
+                        float odist = sqrtf(odx * odx + ody * ody);
+
+                        if (odist >= OBSTACLE_MIN_GAP_PXS) {
+                            continue;
+                        }
+
+                        float nx, ny;
+
+                        if (odist > 0.01f) {
+                            nx = odx / odist;
+                            ny = ody / odist;
+                        } else {
+                            nx = 1.0f;
+                            ny = 0.0f;
+                        }
+
+                        float push = (OBSTACLE_MIN_GAP_PXS - odist) * 0.5f;
+
+                        obstacles[i].x -= nx * push;
+                        obstacles[i].y -= ny * push;
+                        obstacles[j].x += nx * push;
+                        obstacles[j].y += ny * push;
+
+                        obstacle_clamp(&obstacles[i]);
+                        obstacle_clamp(&obstacles[j]);
                     }
+                }
 
-                    if (obstacles[i].y < OBSTACLE_RADIUS) {
-                        obstacles[i].y = OBSTACLE_RADIUS;
-                    } else if (obstacles[i].y > SCREEN_H - OBSTACLE_RADIUS) {
-                        obstacles[i].y = SCREEN_H - OBSTACLE_RADIUS;
-                    }
-
+                for (int i = 0; i < OBSTACLE_COUNT; i++) {
                     float min_dist = BALL_RADIUS + OBSTACLE_RADIUS;
                     float post_dx = x - obstacles[i].x;
                     float post_dy = y - obstacles[i].y;
@@ -401,9 +493,18 @@ static void render_timer_cb(lv_timer_t *timer)
 
     if (state.game_over && !gameover_shown) {
         gameover_shown = true;
-        int32_t sec = (int32_t)(state.elapsed_ms / 1000);
-        int32_t hundredths = (int32_t)((state.elapsed_ms % 1000) / 10);
-        lv_label_set_text_fmt(gameover_score_label, "Score: %d.%02ds", (int)sec, (int)hundredths);
+
+        uint32_t elapsed_ms = (uint32_t)state.elapsed_ms;
+
+        if (elapsed_ms > best_score_ms) {
+            best_score_ms = elapsed_ms;
+            highscore_save(best_score_ms);
+        }
+
+        lv_label_set_text_fmt(gameover_score_label, "Score: %d.%02ds",
+                               (int)(elapsed_ms / 1000), (int)((elapsed_ms % 1000) / 10));
+        lv_label_set_text_fmt(gameover_best_label, "Best: %d.%02ds",
+                               (int)(best_score_ms / 1000), (int)((best_score_ms % 1000) / 10));
         lv_obj_clear_flag(gameover_overlay, LV_OBJ_FLAG_HIDDEN);
     } else if (!state.game_over && gameover_shown) {
         gameover_shown = false;
@@ -441,6 +542,8 @@ lv_obj_t *ball_game_screen_get(void)
 
 void ball_game_init(void)
 {
+    highscore_load();
+
     lvgl_lock();
 
     ball_game_screen = lv_obj_create(NULL);
@@ -538,16 +641,21 @@ void ball_game_init(void)
     lv_obj_t *gameover_title = lv_label_create(gameover_overlay);
     lv_label_set_text(gameover_title, "Game Over");
     lv_obj_set_style_text_color(gameover_title, lv_color_white(), 0);
-    lv_obj_align(gameover_title, LV_ALIGN_CENTER, 0, -50);
+    lv_obj_align(gameover_title, LV_ALIGN_CENTER, 0, -55);
 
     gameover_score_label = lv_label_create(gameover_overlay);
     lv_label_set_text(gameover_score_label, "Score: 0.00s");
     lv_obj_set_style_text_color(gameover_score_label, lv_color_white(), 0);
-    lv_obj_align(gameover_score_label, LV_ALIGN_CENTER, 0, -20);
+    lv_obj_align(gameover_score_label, LV_ALIGN_CENTER, 0, -28);
+
+    gameover_best_label = lv_label_create(gameover_overlay);
+    lv_label_set_text(gameover_best_label, "Best: 0.00s");
+    lv_obj_set_style_text_color(gameover_best_label, lv_color_white(), 0);
+    lv_obj_align(gameover_best_label, LV_ALIGN_CENTER, 0, -6);
 
     lv_obj_t *continue_btn = lv_button_create(gameover_overlay);
     lv_obj_set_size(continue_btn, 120, 40);
-    lv_obj_align(continue_btn, LV_ALIGN_CENTER, 0, 30);
+    lv_obj_align(continue_btn, LV_ALIGN_CENTER, 0, 35);
     lv_obj_add_event_cb(continue_btn, gameover_continue_cb, LV_EVENT_CLICKED, NULL);
 
     lv_obj_t *continue_label = lv_label_create(continue_btn);
@@ -556,7 +664,7 @@ void ball_game_init(void)
 
     lv_obj_t *gameover_menu_btn = lv_button_create(gameover_overlay);
     lv_obj_set_size(gameover_menu_btn, 120, 40);
-    lv_obj_align(gameover_menu_btn, LV_ALIGN_CENTER, 0, 80);
+    lv_obj_align(gameover_menu_btn, LV_ALIGN_CENTER, 0, 85);
     lv_obj_add_event_cb(gameover_menu_btn, back_to_menu_cb, LV_EVENT_CLICKED, NULL);
 
     lv_obj_t *gameover_menu_label = lv_label_create(gameover_menu_btn);
